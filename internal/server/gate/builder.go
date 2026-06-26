@@ -5,6 +5,7 @@ import (
 
 	configgen "project/config/gen"
 	"project/internal/core/app"
+	config "project/internal/core/config"
 	"project/pkg/logger"
 )
 
@@ -18,26 +19,16 @@ type Builder struct {
 }
 
 func NewBuilder(opts Options) *Builder {
-	commonEntry, err := configgen.NewCommonConfigEntry(commonConfigPath)
-	if err != nil {
-		panic(fmt.Errorf("load common config: %w", err))
-	}
-	gateEntry, err := configgen.NewGateConfigEntry(gateConfigPath)
-	if err != nil {
-		panic(fmt.Errorf("load gate config: %w", err))
-	}
-	log, err := logger.NewZapDevelopment()
-	if err != nil {
-		panic(fmt.Errorf("init gate logger: %w", err))
-	}
-	logger.SetGlobal(log)
+	commonEntry := mustLoadCommonConfig()
+	gateEntry := mustLoadGateConfig()
+	initLogger()
 
 	base := app.NewBaseBuilder(nil)
 	cfg := gateEntry.Get()
 
 	listenAddr := cfg.Gate.ListenTcp
-	if opts.Addr != "" {
-		listenAddr = opts.Addr
+	if opts.ListenAddr != "" {
+		listenAddr = opts.ListenAddr
 	}
 
 	base.AddModule("logger", NewLoggerModule(nil))
@@ -46,4 +37,28 @@ func NewBuilder(opts Options) *Builder {
 	base.AddModule("gate.acceptor", NewAcceptorModule(listenAddr))
 
 	return &Builder{BaseBuilder: base}
+}
+
+func mustLoadCommonConfig() *config.ConfigEntry[configgen.CommonConfig] {
+	entry, err := configgen.NewCommonConfigEntry(commonConfigPath)
+	if err != nil {
+		panic(fmt.Errorf("load common config: %w", err))
+	}
+	return entry
+}
+
+func mustLoadGateConfig() *config.ConfigEntry[configgen.GateConfig] {
+	entry, err := configgen.NewGateConfigEntry(gateConfigPath)
+	if err != nil {
+		panic(fmt.Errorf("load gate config: %w", err))
+	}
+	return entry
+}
+
+func initLogger() {
+	log, err := logger.NewZapDevelopment()
+	if err != nil {
+		panic(fmt.Errorf("init gate logger: %w", err))
+	}
+	logger.SetGlobal(log)
 }

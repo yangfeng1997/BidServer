@@ -45,9 +45,9 @@ func newStartCommand(opts *base.Options) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			builder := lobby.NewBuilder(lobby.Options{
 				Options: base.Options{
-					Addr:    opts.Addr,
-					PidFile: opts.PidFile,
-					Daemon:  opts.Daemon,
+					ListenAddr: opts.ListenAddr,
+					PidFile:    opts.PidFile,
+					Daemon:     opts.Daemon,
 				},
 			})
 
@@ -61,7 +61,7 @@ func newStartCommand(opts *base.Options) *cobra.Command {
 			}()
 
 			logger.Info("lobbysvr starting",
-				logger.String("addr", opts.Addr),
+				logger.String("addr", opts.ListenAddr),
 				logger.String("pid_file", opts.PidFile),
 				logger.Bool("daemon", opts.Daemon),
 			)
@@ -75,7 +75,7 @@ func newStartCommand(opts *base.Options) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&opts.Addr, "addr", "", "server listen address override")
+	cmd.Flags().StringVar(&opts.ListenAddr, "addr", "", "server listen address override")
 	cmd.Flags().BoolVar(&opts.Daemon, "daemon", false, "run as daemon")
 
 	return cmd
