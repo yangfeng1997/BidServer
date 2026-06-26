@@ -1,0 +1,8 @@
+etcd:
+  endpoints:
+    - "${etcd_endpoint}"
+
+redis:
+  host: "${redis_host}"
+  port: ${redis_port}
+  password: "${REDIS_PWD}"

@@ -1,0 +1,12 @@
+svr_list:
+  - gatesvr
+  - lobbysvr
+
+gate_listen_tcp: "0.0.0.0:7001"
+gate_listen_ws: "0.0.0.0:7002"
+lobby_listen_addr: "0.0.0.0:7003"
+etcd_endpoint: "127.0.0.1:2379"
+redis_host: "127.0.0.1"
+redis_port: 6379
+log_dir: "./logs"
+REDIS_PWD: "dev-password"

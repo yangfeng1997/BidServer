@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package config;
+
+import "config/schema/options.proto";
+
+option go_package = "project/config/gen;configgen";
+
+message CommonConfig {
+  EtcdConfig etcd = 1;
+  RedisConfig redis = 2;
+}
+
+message EtcdConfig {
+  repeated string endpoints = 1 [(config.required) = true];
+}
+
+message RedisConfig {
+  string host = 1 [(config.required) = true];
+  int32 port = 2 [(config.required) = true];
+  string password = 3 [(config.required) = true, (config.env) = true];
+}

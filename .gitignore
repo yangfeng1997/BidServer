@@ -1,0 +1,51 @@
+# Build outputs
+/build/
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Runtime files
+/run/**
+!/run/common/
+!/run/common/conf/
+!/run/common/conf/.gitkeep
+!/run/gatesvr/
+!/run/gatesvr/bin/
+!/run/gatesvr/bin/.gitkeep
+!/run/gatesvr/conf/
+!/run/gatesvr/conf/.gitkeep
+!/run/gatesvr/log/
+!/run/gatesvr/log/.gitkeep
+!/run/lobbysvr/
+!/run/lobbysvr/bin/
+!/run/lobbysvr/bin/.gitkeep
+!/run/lobbysvr/conf/
+!/run/lobbysvr/conf/.gitkeep
+!/run/lobbysvr/log/
+!/run/lobbysvr/log/.gitkeep
+*.pid
+*.log
+/logs/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Local IDE / agent state
+.claude/
+.vscode/
+.idea/
+
+# Local secrets
+config/secrets/*.env
+!config/secrets/*.env.example
+.env
+.env.*
+
+# OS files
+.DS_Store
+Thumbs.db

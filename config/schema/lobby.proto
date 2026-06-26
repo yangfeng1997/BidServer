@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package config;
+
+import "config/schema/options.proto";
+import "config/schema/types.proto";
+
+option go_package = "project/config/gen;configgen";
+
+message LobbyConfig {
+  LobbyRuntimeConfig lobby = 1;
+  LogConfig log = 2;
+}
+
+message LobbyRuntimeConfig {
+  string listen_addr = 1 [(config.required) = true, (config.env) = true];
+  int32 max_player = 2 [(config.required) = true];
+  int32 heartbeat_sec = 3 [(config.required) = true, (config.reload) = true];
+}

@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package config;
+
+import "config/schema/options.proto";
+import "config/schema/types.proto";
+
+option go_package = "project/config/gen;configgen";
+
+message GateConfig {
+  GateRuntimeConfig gate = 1;
+  LogConfig log = 2;
+}
+
+message GateRuntimeConfig {
+  string listen_tcp = 1 [(config.required) = true, (config.env) = true];
+  string listen_ws = 2 [(config.required) = true, (config.env) = true];
+  int32 max_conn = 3 [(config.required) = true];
+  int32 heartbeat_sec = 4 [(config.required) = true, (config.reload) = true];
+}

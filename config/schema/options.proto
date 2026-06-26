@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package config;
+
+import "google/protobuf/descriptor.proto";
+
+option go_package = "project/config/gen;configgen";
+
+extend google.protobuf.FieldOptions {
+  bool reload = 50005;
+  bool required = 50006;
+  bool env = 50007;
+  string enum_values = 50008;
+}

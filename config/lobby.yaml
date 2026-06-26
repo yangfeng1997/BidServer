@@ -1,0 +1,14 @@
+lobby:
+  max_player: 5000
+  heartbeat_sec: 30
+  listen_addr: "${lobby_listen_addr}"
+
+log:
+  level: info
+  format: console
+  stderr_also: true
+  dir: "${log_dir}"
+  basename: lobbysvr
+  max_size_mb: 100
+  max_backups: 72
+  rotate_by_hour: true
