@@ -46,19 +46,6 @@ func (cfg *GateConfig) Validate() error {
 	if cfg == nil {
 		return fmt.Errorf("config is nil")
 	}
-	if err := cfg.Gate.Validate(); err != nil {
-		return fmt.Errorf("gate: %w", err)
-	}
-	if err := cfg.Log.Validate(); err != nil {
-		return fmt.Errorf("log: %w", err)
-	}
-	return nil
-}
-
-func (cfg *GateRuntimeConfig) Validate() error {
-	if cfg == nil {
-		return fmt.Errorf("config is nil")
-	}
 	if cfg.ListenTcp == "" {
 		return fmt.Errorf("listen_tcp is required")
 	}
@@ -71,23 +58,13 @@ func (cfg *GateRuntimeConfig) Validate() error {
 	if cfg.HeartbeatSec == 0 {
 		return fmt.Errorf("heartbeat_sec is required")
 	}
+	if err := cfg.LogGroup.Validate(); err != nil {
+		return fmt.Errorf("log_group: %w", err)
+	}
 	return nil
 }
 
 func (cfg *LobbyConfig) Validate() error {
-	if cfg == nil {
-		return fmt.Errorf("config is nil")
-	}
-	if err := cfg.Lobby.Validate(); err != nil {
-		return fmt.Errorf("lobby: %w", err)
-	}
-	if err := cfg.Log.Validate(); err != nil {
-		return fmt.Errorf("log: %w", err)
-	}
-	return nil
-}
-
-func (cfg *LobbyRuntimeConfig) Validate() error {
 	if cfg == nil {
 		return fmt.Errorf("config is nil")
 	}
@@ -99,6 +76,9 @@ func (cfg *LobbyRuntimeConfig) Validate() error {
 	}
 	if cfg.HeartbeatSec == 0 {
 		return fmt.Errorf("heartbeat_sec is required")
+	}
+	if err := cfg.LogGroup.Validate(); err != nil {
+		return fmt.Errorf("log_group: %w", err)
 	}
 	return nil
 }
@@ -126,6 +106,22 @@ func (cfg *LogConfig) Validate() error {
 	}
 	if cfg.Basename == "" {
 		return fmt.Errorf("basename is required")
+	}
+	return nil
+}
+
+func (cfg *LogGroupConfig) Validate() error {
+	if cfg == nil {
+		return fmt.Errorf("config is nil")
+	}
+	if err := cfg.Main.Validate(); err != nil {
+		return fmt.Errorf("main: %w", err)
+	}
+	if err := cfg.Res.Validate(); err != nil {
+		return fmt.Errorf("res: %w", err)
+	}
+	if err := cfg.Tracing.Validate(); err != nil {
+		return fmt.Errorf("tracing: %w", err)
 	}
 	return nil
 }

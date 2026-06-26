@@ -6,7 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"project/internal/server/base"
+	opt "project/internal/core/options"
+	"project/internal/core/process"
 	"project/internal/server/gate"
 	"project/pkg/logger"
 )
@@ -19,7 +20,7 @@ func main() {
 }
 
 func newRootCommand() *cobra.Command {
-	opts := &base.Options{}
+	opts := &gate.Options{}
 
 	cmd := &cobra.Command{
 		Use:   "gatesvr",
@@ -34,37 +35,39 @@ func newRootCommand() *cobra.Command {
 	return cmd
 }
 
-func bindCommonFlags(cmd *cobra.Command, opts *base.Options) {
+func bindCommonFlags(cmd *cobra.Command, opts *gate.Options) {
 	cmd.PersistentFlags().StringVarP(&opts.PidFile, "pid-file", "p", "gatesvr.pid", "pid file path")
 }
 
-func newStartCommand(opts *base.Options) *cobra.Command {
+func newStartCommand(opts *gate.Options) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "start",
 		Short: "Start gate server",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			builder := gate.NewBuilder(gate.Options{
-				Options: base.Options{
-					ListenAddr: opts.ListenAddr,
-					PidFile:    opts.PidFile,
-					Daemon:     opts.Daemon,
+			if opts.CommonConfigPath == "" {
+				return fmt.Errorf("common config path is required")
+			}
+			if opts.GateConfigPath == "" {
+				return fmt.Errorf("gate config path is required")
+			}
+
+			builder := gate.NewGateBuilder(gate.Options{
+				BaseOptions: opt.BaseOptions{
+					PidFile:          opts.PidFile,
+					Daemon:           opts.Daemon,
+					CommonConfigPath: opts.CommonConfigPath,
 				},
+				GateConfigPath: opts.GateConfigPath,
 			})
 
-			if err := base.WritePIDFile(opts.PidFile); err != nil {
+			if err := process.WritePIDFile(opts.PidFile); err != nil {
 				return fmt.Errorf("write pid file: %w", err)
 			}
 			defer func() {
-				if err := base.RemovePIDFile(opts.PidFile); err != nil {
+				if err := process.RemovePIDFile(opts.PidFile); err != nil {
 					logger.Error("remove gate pid file failed", logger.Err(err))
 				}
 			}()
-
-			logger.Info("gatesvr starting",
-				logger.String("addr", opts.ListenAddr),
-				logger.String("pid_file", opts.PidFile),
-				logger.Bool("daemon", opts.Daemon),
-			)
 
 			app, err := builder.Build()
 			if err != nil {
@@ -75,18 +78,19 @@ func newStartCommand(opts *base.Options) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&opts.ListenAddr, "addr", "", "server listen address override")
+	cmd.Flags().StringVar(&opts.CommonConfigPath, "common-config", "", "common config path")
+	cmd.Flags().StringVar(&opts.GateConfigPath, "gate-config", "", "gate config path")
 	cmd.Flags().BoolVar(&opts.Daemon, "daemon", false, "run as daemon")
 
 	return cmd
 }
 
-func newStopCommand(opts *base.Options) *cobra.Command {
+func newStopCommand(opts *gate.Options) *cobra.Command {
 	return &cobra.Command{
 		Use:   "stop",
 		Short: "Stop gate server",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := base.SignalProcess(opts.PidFile, "stop"); err != nil {
+			if err := process.SignalProcess(opts.PidFile, "stop"); err != nil {
 				return fmt.Errorf("stop gatesvr: %w", err)
 			}
 			fmt.Printf("gatesvr stop pid_file=%s\n", opts.PidFile)
@@ -95,12 +99,12 @@ func newStopCommand(opts *base.Options) *cobra.Command {
 	}
 }
 
-func newReloadCommand(opts *base.Options) *cobra.Command {
+func newReloadCommand(opts *gate.Options) *cobra.Command {
 	return &cobra.Command{
 		Use:   "reload",
 		Short: "Reload gate server",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := base.SignalProcess(opts.PidFile, "reload"); err != nil {
+			if err := process.SignalProcess(opts.PidFile, "reload"); err != nil {
 				return fmt.Errorf("reload gatesvr: %w", err)
 			}
 			fmt.Printf("gatesvr reload pid_file=%s\n", opts.PidFile)

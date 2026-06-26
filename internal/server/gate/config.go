@@ -8,16 +8,19 @@ import (
 	config "project/internal/core/config"
 )
 
-var commonConfigEntry *config.ConfigEntry[configgen.CommonConfig]
-var gateConfigEntry *config.ConfigEntry[configgen.GateConfig]
+type CommonConfigEntry = config.ConfigEntry[configgen.CommonConfig]
+type GateConfigEntry = config.ConfigEntry[configgen.GateConfig]
+
+var commonConfigEntry *CommonConfigEntry
+var gateConfigEntry *GateConfigEntry
 
 type ConfigModule struct {
 	app.BaseModule
 }
 
-func NewConfigModule(commonEntry *config.ConfigEntry[configgen.CommonConfig], gateEntry *config.ConfigEntry[configgen.GateConfig]) *ConfigModule {
-	commonConfigEntry = commonEntry
-	gateConfigEntry = gateEntry
+func NewConfigModule(commonConfig *CommonConfigEntry, gateConfig *GateConfigEntry) *ConfigModule {
+	commonConfigEntry = commonConfig
+	gateConfigEntry = gateConfig
 	return &ConfigModule{}
 }
 

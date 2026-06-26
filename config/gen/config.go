@@ -17,26 +17,18 @@ type RedisConfig struct {
 }
 
 type GateConfig struct {
-	Gate GateRuntimeConfig `yaml:"gate"`
-	Log  LogConfig         `yaml:"log"`
-}
-
-type GateRuntimeConfig struct {
-	ListenTcp    string `yaml:"listen_tcp"`
-	ListenWs     string `yaml:"listen_ws"`
-	MaxConn      int32  `yaml:"max_conn"`
-	HeartbeatSec int32  `yaml:"heartbeat_sec"`
+	ListenTcp    string         `yaml:"listen_tcp"`
+	ListenWs     string         `yaml:"listen_ws"`
+	MaxConn      int32          `yaml:"max_conn"`
+	HeartbeatSec int32          `yaml:"heartbeat_sec"`
+	LogGroup     LogGroupConfig `yaml:"log_group"`
 }
 
 type LobbyConfig struct {
-	Lobby LobbyRuntimeConfig `yaml:"lobby"`
-	Log   LogConfig          `yaml:"log"`
-}
-
-type LobbyRuntimeConfig struct {
-	ListenAddr   string `yaml:"listen_addr"`
-	MaxPlayer    int32  `yaml:"max_player"`
-	HeartbeatSec int32  `yaml:"heartbeat_sec"`
+	ListenAddr   string         `yaml:"listen_addr"`
+	MaxPlayer    int32          `yaml:"max_player"`
+	HeartbeatSec int32          `yaml:"heartbeat_sec"`
+	LogGroup     LogGroupConfig `yaml:"log_group"`
 }
 
 type LogConfig struct {
@@ -48,4 +40,10 @@ type LogConfig struct {
 	MaxSizeMb    int32  `yaml:"max_size_mb"`
 	MaxBackups   int32  `yaml:"max_backups"`
 	RotateByHour bool   `yaml:"rotate_by_hour"`
+}
+
+type LogGroupConfig struct {
+	Main    LogConfig `yaml:"main"`
+	Res     LogConfig `yaml:"res"`
+	Tracing LogConfig `yaml:"tracing"`
 }

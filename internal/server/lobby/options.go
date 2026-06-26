@@ -1,7 +1,8 @@
 package lobby
 
-import "project/internal/server/base"
+import opt "project/internal/core/options"
 
 type Options struct {
-	base.Options
+	opt.BaseOptions
+	LobbyConfigPath string
 }

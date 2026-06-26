@@ -8,12 +8,11 @@ import "config/schema/types.proto";
 option go_package = "project/config/gen;configgen";
 
 message LobbyConfig {
-  LobbyRuntimeConfig lobby = 1;
-  LogConfig log = 2;
-}
+  option (config.root) = true;
+  option (config.server) = "lobbysvr";
 
-message LobbyRuntimeConfig {
   string listen_addr = 1 [(config.required) = true, (config.env) = true];
   int32 max_player = 2 [(config.required) = true];
   int32 heartbeat_sec = 3 [(config.required) = true, (config.reload) = true];
+  LogGroupConfig log_group = 4;
 }

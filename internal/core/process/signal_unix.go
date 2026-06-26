@@ -1,8 +1,11 @@
-package base
+//go:build !windows
+
+package process
 
 import (
 	"fmt"
 	"os"
+	"syscall"
 )
 
 func SignalProcess(pidFile string, signal string) error {
@@ -16,9 +19,9 @@ func SignalProcess(pidFile string, signal string) error {
 	}
 	switch signal {
 	case "stop":
-		return proc.Kill()
+		return proc.Signal(syscall.SIGTERM)
 	case "reload":
-		return fmt.Errorf("reload signal is not supported on windows")
+		return proc.Signal(syscall.SIGHUP)
 	default:
 		return fmt.Errorf("unknown signal %q", signal)
 	}

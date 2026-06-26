@@ -5,55 +5,50 @@ import (
 
 	configgen "project/config/gen"
 	"project/internal/core/app"
-	config "project/internal/core/config"
-	"project/pkg/logger"
-)
-
-const (
-	commonConfigPath = "run/common/conf/common.yaml"
-	lobbyConfigPath  = "run/lobbysvr/conf/lobby.yaml"
+	corelogger "project/internal/core/logger"
+	opt "project/internal/core/options"
 )
 
 type Builder struct {
 	*app.BaseBuilder
 }
 
-func NewBuilder(opts Options) *Builder {
-	commonEntry := mustLoadCommonConfig()
-	lobbyEntry := mustLoadLobbyConfig()
-	initLogger()
+func NewLobbyBuilder(opts Options) *Builder {
+	// 1. 必须先加载配置
+	commonConfig := mustLoadCommonConfig(opts.CommonConfigPath)
+	lobbyConfig := mustLoadLobbyConfig(opts.LobbyConfigPath)
+	// 2. 创建Logger模块，依赖Option和配置
+	loggerModule := newLoggerModule(opts.BaseOptions, lobbyConfig.Get().LogGroup)
+	// 3. 创建Config模块
+	configModule := NewConfigModule(commonConfig, lobbyConfig)
 
-	base := app.NewBaseBuilder(nil)
-	cfg := lobbyEntry.Get()
+	baseBuilder := app.NewBaseBuilder(nil)
+	baseBuilder.AddModule("logger", loggerModule)
+	baseBuilder.AddModule("config", configModule)
 
-	base.AddModule("logger", NewLoggerModule(nil))
-	base.AddModule("config", NewConfigModule(commonEntry, lobbyEntry))
-	base.AddModule("lobby.session", NewSessionModule(int(cfg.Lobby.MaxPlayer)))
-	base.AddModule("lobby.acceptor", NewAcceptorModule(opts.ListenAddr))
-
-	return &Builder{BaseBuilder: base}
+	return &Builder{BaseBuilder: baseBuilder}
 }
 
-func mustLoadCommonConfig() *config.ConfigEntry[configgen.CommonConfig] {
-	entry, err := configgen.NewCommonConfigEntry(commonConfigPath)
+func mustLoadCommonConfig(path string) *CommonConfigEntry {
+	entry, err := configgen.NewCommonConfigEntry(path)
 	if err != nil {
 		panic(fmt.Errorf("load common config: %w", err))
 	}
 	return entry
 }
 
-func mustLoadLobbyConfig() *config.ConfigEntry[configgen.LobbyConfig] {
-	entry, err := configgen.NewLobbyConfigEntry(lobbyConfigPath)
+func mustLoadLobbyConfig(path string) *LobbyConfigEntry {
+	entry, err := configgen.NewLobbyConfigEntry(path)
 	if err != nil {
 		panic(fmt.Errorf("load lobby config: %w", err))
 	}
 	return entry
 }
 
-func initLogger() {
-	log, err := logger.NewZapDevelopment()
+func newLoggerModule(opts opt.BaseOptions, cfg configgen.LogGroupConfig) *corelogger.LoggerModule {
+	module, err := corelogger.NewLoggerModule(opts, cfg)
 	if err != nil {
 		panic(fmt.Errorf("init lobby logger: %w", err))
 	}
-	logger.SetGlobal(log)
+	return module
 }

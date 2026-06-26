@@ -16,3 +16,9 @@ message LogConfig {
   int32 max_backups = 7;
   bool rotate_by_hour = 8;
 }
+
+message LogGroupConfig {
+  LogConfig main    = 1;
+  LogConfig res     = 2;
+  LogConfig tracing = 3;
+}

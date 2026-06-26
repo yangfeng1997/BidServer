@@ -7,6 +7,9 @@ import "config/schema/options.proto";
 option go_package = "project/config/gen;configgen";
 
 message CommonConfig {
+  option (config.root) = true;
+  option (config.common) = true;
+
   EtcdConfig etcd = 1;
   RedisConfig redis = 2;
 }

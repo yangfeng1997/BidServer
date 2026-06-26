@@ -8,16 +8,19 @@ import (
 	config "project/internal/core/config"
 )
 
-var commonConfigEntry *config.ConfigEntry[configgen.CommonConfig]
-var lobbyConfigEntry *config.ConfigEntry[configgen.LobbyConfig]
+type CommonConfigEntry = config.ConfigEntry[configgen.CommonConfig]
+type LobbyConfigEntry = config.ConfigEntry[configgen.LobbyConfig]
+
+var commonConfigEntry *CommonConfigEntry
+var lobbyConfigEntry *LobbyConfigEntry
 
 type ConfigModule struct {
 	app.BaseModule
 }
 
-func NewConfigModule(commonEntry *config.ConfigEntry[configgen.CommonConfig], lobbyEntry *config.ConfigEntry[configgen.LobbyConfig]) *ConfigModule {
-	commonConfigEntry = commonEntry
-	lobbyConfigEntry = lobbyEntry
+func NewConfigModule(commonConfig *CommonConfigEntry, lobbyConfig *LobbyConfigEntry) *ConfigModule {
+	commonConfigEntry = commonConfig
+	lobbyConfigEntry = lobbyConfig
 	return &ConfigModule{}
 }
 
