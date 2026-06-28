@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	configgen "project/config/gen"
-	"project/internal/core/app"
 	opt "project/internal/core/options"
 	"project/pkg/logger"
 )
@@ -13,36 +12,55 @@ var (
 	Main    logger.Logger
 	Res     logger.Logger
 	Tracing logger.Logger
+
+	mainCloser    *logger.LogCloser
+	resCloser     *logger.LogCloser
+	tracingCloser *logger.LogCloser
 )
 
-type LoggerModule struct {
-	app.BaseModule
-	closers []*logger.LogCloser
-}
+type LoggerGroup struct{}
 
-func NewLoggerModule(opts opt.BaseOptions, logGroupCfg configgen.LogGroupConfig) (*LoggerModule, error) {
-	mainLogger, mainCloser, err := NewMainLogger(opts, logGroupCfg.Main)
+func NewLoggerGroup(opts opt.BaseOptions, loggerGroupCfg configgen.LoggerGroupConfig) (*LoggerGroup, error) {
+	mainLogger, newMainCloser, err := NewMainLogger(opts, loggerGroupCfg.Main)
 	if err != nil {
 		return nil, err
 	}
-	resLogger, resCloser, err := NewResLogger(opts, logGroupCfg.Res)
+	resLogger, newResCloser, err := NewResLogger(opts, loggerGroupCfg.Res)
 	if err != nil {
-		_ = mainCloser.Close()
+		_ = newMainCloser.Close()
 		return nil, err
 	}
-	tracingLogger, tracingCloser, err := NewTracingLogger(opts, logGroupCfg.Tracing)
+	tracingLogger, newTracingCloser, err := NewTracingLogger(opts, loggerGroupCfg.Tracing)
 	if err != nil {
-		_ = mainCloser.Close()
-		_ = resCloser.Close()
+		_ = newMainCloser.Close()
+		_ = newResCloser.Close()
 		return nil, err
 	}
 
 	Main = mainLogger
 	Res = resLogger
 	Tracing = tracingLogger
+	mainCloser = newMainCloser
+	resCloser = newResCloser
+	tracingCloser = newTracingCloser
 	logger.SetGlobal(Main)
 
-	return &LoggerModule{closers: []*logger.LogCloser{mainCloser, resCloser, tracingCloser}}, nil
+	return &LoggerGroup{}, nil
+}
+
+func (group *LoggerGroup) Shutdown() {
+	closeLogger("main", mainCloser)
+	closeLogger("res", resCloser)
+	closeLogger("tracing", tracingCloser)
+}
+
+func closeLogger(name string, closer *logger.LogCloser) {
+	if closer == nil {
+		return
+	}
+	if err := closer.Close(); err != nil {
+		logger.Error("close logger failed", logger.String("name", name), logger.Err(err))
+	}
 }
 
 func NewMainLogger(opts opt.BaseOptions, cfg configgen.LogConfig) (logger.Logger, *logger.LogCloser, error) {
@@ -55,17 +73,6 @@ func NewResLogger(opts opt.BaseOptions, cfg configgen.LogConfig) (logger.Logger,
 
 func NewTracingLogger(opts opt.BaseOptions, cfg configgen.LogConfig) (logger.Logger, *logger.LogCloser, error) {
 	return newFileLogger(opts, cfg)
-}
-
-func (module *LoggerModule) Stop() {
-	for _, closer := range module.closers {
-		if closer == nil {
-			continue
-		}
-		if err := closer.Close(); err != nil {
-			logger.Error("close logger failed", logger.Err(err))
-		}
-	}
 }
 
 func newFileLogger(opts opt.BaseOptions, cfg configgen.LogConfig) (logger.Logger, *logger.LogCloser, error) {

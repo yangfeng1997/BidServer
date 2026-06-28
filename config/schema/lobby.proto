@@ -14,5 +14,5 @@ message LobbyConfig {
   string listen_addr = 1 [(config.required) = true, (config.env) = true];
   int32 max_player = 2 [(config.required) = true];
   int32 heartbeat_sec = 3 [(config.required) = true, (config.reload) = true];
-  LogGroupConfig log_group = 4;
+  LoggerGroupConfig logger_group = 4;
 }

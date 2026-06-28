@@ -2,20 +2,13 @@ package app
 
 // Module 是 App 管理的生命周期单元。
 type Module interface {
-	Init(App) error
+	Name() string
+	App() App
+	Set(app App)
+	Init() error
 	AfterInit() error
-	BeforeStop()
-	Stop()
-}
-
-type Reloadable interface {
-	Reload() error
-}
-
-// ModuleRegistration 描述一个待注册模块。
-type ModuleRegistration struct {
-	Name   string
-	Module Module
+	BeforeShutdown()
+	Shutdown()
 }
 
 type moduleWrapper struct {
@@ -24,9 +17,14 @@ type moduleWrapper struct {
 }
 
 // BaseModule 提供生命周期方法空实现。
-type BaseModule struct{}
+type BaseModule struct {
+	app App
+}
 
-func (b *BaseModule) Init(App) error   { return nil }
+func (b *BaseModule) Name() string     { return "" }
+func (b *BaseModule) App() App         { return b.app }
+func (b *BaseModule) Set(app App)      { b.app = app }
+func (b *BaseModule) Init() error      { return nil }
 func (b *BaseModule) AfterInit() error { return nil }
-func (b *BaseModule) BeforeStop()      {}
-func (b *BaseModule) Stop()            {}
+func (b *BaseModule) BeforeShutdown()  {}
+func (b *BaseModule) Shutdown()        {}

@@ -2,14 +2,21 @@ package app
 
 type Builder interface {
 	Build() (App, error)
-	AddModule(name string, module Module)
-	AddPostBuildHook(hook func(App) error)
+	AddModule(module Module)
+	AddShutdownHook(hook func())
+	AddReloadHook(hook func() error)
+	SetDaemon(daemon bool)
+	SetPprof(enabled bool, addr string)
 }
 
 type BaseBuilder struct {
 	dieChan             chan bool
-	moduleRegistrations []ModuleRegistration
-	postBuildHooks      []func(App) error
+	daemon              bool
+	pprof               bool
+	pprofAddr           string
+	moduleRegistrations []moduleWrapper
+	shutdownHooks       []func()
+	reloadHooks         []func() error
 }
 
 func NewBaseBuilder(dieChan chan bool) *BaseBuilder {
@@ -22,28 +29,35 @@ func NewBaseBuilder(dieChan chan bool) *BaseBuilder {
 	}
 }
 
-func (builder *BaseBuilder) AddModule(name string, module Module) {
-	builder.moduleRegistrations = append(builder.moduleRegistrations, ModuleRegistration{
-		Name:   name,
-		Module: module,
+func (builder *BaseBuilder) SetDaemon(daemon bool) {
+	builder.daemon = daemon
+}
+
+func (builder *BaseBuilder) SetPprof(enabled bool, addr string) {
+	builder.pprof = enabled
+	builder.pprofAddr = addr
+}
+
+func (builder *BaseBuilder) AddModule(module Module) {
+	builder.moduleRegistrations = append(builder.moduleRegistrations, moduleWrapper{
+		name:   module.Name(),
+		module: module,
 	})
 }
 
-func (builder *BaseBuilder) AddPostBuildHook(hook func(App) error) {
-	builder.postBuildHooks = append(builder.postBuildHooks, hook)
+func (builder *BaseBuilder) AddShutdownHook(hook func()) {
+	builder.shutdownHooks = append(builder.shutdownHooks, hook)
+}
+
+func (builder *BaseBuilder) AddReloadHook(hook func() error) {
+	builder.reloadHooks = append(builder.reloadHooks, hook)
 }
 
 func (builder *BaseBuilder) Build() (App, error) {
-	app := NewBaseApp(builder.dieChan)
+	app := NewBaseApp(builder.dieChan, builder.daemon, builder.pprof, builder.pprofAddr, builder.shutdownHooks, builder.reloadHooks)
 
 	for _, registration := range builder.moduleRegistrations {
-		if err := app.RegisterModule(registration.Module, registration.Name); err != nil {
-			return nil, err
-		}
-	}
-
-	for _, postBuildHook := range builder.postBuildHooks {
-		if err := postBuildHook(app); err != nil {
+		if err := app.RegisterModule(registration.module); err != nil {
 			return nil, err
 		}
 	}

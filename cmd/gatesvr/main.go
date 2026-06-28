@@ -9,7 +9,6 @@ import (
 	opt "project/internal/core/options"
 	"project/internal/core/process"
 	"project/internal/server/gate"
-	"project/pkg/logger"
 )
 
 func main() {
@@ -50,37 +49,41 @@ func newStartCommand(opts *gate.Options) *cobra.Command {
 			if opts.GateConfigPath == "" {
 				return fmt.Errorf("gate config path is required")
 			}
+			if opts.Daemon {
+				started, err := process.StartDaemon()
+				if err != nil {
+					return fmt.Errorf("start gate daemon: %w", err)
+				}
+				if started {
+					return nil
+				}
+			}
 
 			builder := gate.NewGateBuilder(gate.Options{
 				BaseOptions: opt.BaseOptions{
 					PidFile:          opts.PidFile,
 					Daemon:           opts.Daemon,
+					Pprof:            opts.Pprof,
+					PprofAddr:        opts.PprofAddr,
 					CommonConfigPath: opts.CommonConfigPath,
 				},
 				GateConfigPath: opts.GateConfigPath,
 			})
-
-			if err := process.WritePIDFile(opts.PidFile); err != nil {
-				return fmt.Errorf("write pid file: %w", err)
-			}
-			defer func() {
-				if err := process.RemovePIDFile(opts.PidFile); err != nil {
-					logger.Error("remove gate pid file failed", logger.Err(err))
-				}
-			}()
 
 			app, err := builder.Build()
 			if err != nil {
 				return fmt.Errorf("build gate app: %w", err)
 			}
 
-			return app.Start()
+			return app.Startup()
 		},
 	}
 
 	cmd.Flags().StringVar(&opts.CommonConfigPath, "common-config", "", "common config path")
 	cmd.Flags().StringVar(&opts.GateConfigPath, "gate-config", "", "gate config path")
 	cmd.Flags().BoolVar(&opts.Daemon, "daemon", false, "run as daemon")
+	cmd.Flags().BoolVar(&opts.Pprof, "pprof", false, "enable pprof server")
+	cmd.Flags().StringVar(&opts.PprofAddr, "pprof-addr", "127.0.0.1:6060", "pprof listen address")
 
 	return cmd
 }

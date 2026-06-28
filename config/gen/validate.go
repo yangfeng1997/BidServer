@@ -58,8 +58,8 @@ func (cfg *GateConfig) Validate() error {
 	if cfg.HeartbeatSec == 0 {
 		return fmt.Errorf("heartbeat_sec is required")
 	}
-	if err := cfg.LogGroup.Validate(); err != nil {
-		return fmt.Errorf("log_group: %w", err)
+	if err := cfg.LoggerGroup.Validate(); err != nil {
+		return fmt.Errorf("logger_group: %w", err)
 	}
 	return nil
 }
@@ -77,8 +77,8 @@ func (cfg *LobbyConfig) Validate() error {
 	if cfg.HeartbeatSec == 0 {
 		return fmt.Errorf("heartbeat_sec is required")
 	}
-	if err := cfg.LogGroup.Validate(); err != nil {
-		return fmt.Errorf("log_group: %w", err)
+	if err := cfg.LoggerGroup.Validate(); err != nil {
+		return fmt.Errorf("logger_group: %w", err)
 	}
 	return nil
 }
@@ -110,7 +110,7 @@ func (cfg *LogConfig) Validate() error {
 	return nil
 }
 
-func (cfg *LogGroupConfig) Validate() error {
+func (cfg *LoggerGroupConfig) Validate() error {
 	if cfg == nil {
 		return fmt.Errorf("config is nil")
 	}

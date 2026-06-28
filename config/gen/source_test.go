@@ -28,7 +28,7 @@ func newTestGateConfig() *GateConfig {
 		ListenWs:     "127.0.0.1:7002",
 		MaxConn:      100,
 		HeartbeatSec: 30,
-		LogGroup: LogGroupConfig{
+		LoggerGroup: LoggerGroupConfig{
 			Main:    newTestLogConfig("gate"),
 			Res:     newTestLogConfig("gate_res"),
 			Tracing: newTestLogConfig("gate_tracing"),
