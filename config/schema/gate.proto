@@ -15,5 +15,5 @@ message GateConfig {
   string listen_ws = 2 [(config.required) = true, (config.env) = true];
   int32 max_conn = 3 [(config.required) = true];
   int32 heartbeat_sec = 4 [(config.required) = true, (config.reload) = true];
-  LogGroupConfig log_group = 5;
+  LoggerGroupConfig logger_group = 5;
 }

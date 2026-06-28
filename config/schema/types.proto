@@ -17,7 +17,7 @@ message LogConfig {
   bool rotate_by_hour = 8;
 }
 
-message LogGroupConfig {
+message LoggerGroupConfig {
   LogConfig main    = 1;
   LogConfig res     = 2;
   LogConfig tracing = 3;

@@ -4,7 +4,7 @@ max_conn: 10000
 heartbeat_sec: 30
 
 
-log_group:
+logger_group:
   main:
     level: info
     format: console

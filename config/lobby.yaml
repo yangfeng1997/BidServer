@@ -2,7 +2,7 @@ max_player: 5000
 heartbeat_sec: 30
 listen_addr: "${lobby_listen_addr}"
 
-log_group:
+logger_group:
   main:
     level: info
     format: console
