@@ -41,8 +41,6 @@ __pycache__/
 .idea/
 
 # Local secrets
-config/secrets/*.env
-!config/secrets/*.env.example
 .env
 .env.*
 
