@@ -3,8 +3,6 @@ package process
 import (
 	"fmt"
 	"os"
-	"strconv"
-	"strings"
 )
 
 func WritePIDFile(path string) error {
@@ -22,16 +20,4 @@ func RemovePIDFile(path string) error {
 		return err
 	}
 	return nil
-}
-
-func ReadPIDFile(path string) (int, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return 0, err
-	}
-	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
-	if err != nil {
-		return 0, fmt.Errorf("parse pid file %s: %w", path, err)
-	}
-	return pid, nil
 }

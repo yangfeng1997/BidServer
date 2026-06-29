@@ -20,6 +20,10 @@ import yaml
 from config_bake import bake_file, load_values
 
 DEFAULT_SERVICES = ["gatesvr", "lobbysvr"]
+SERVICE_CONFIG_FLAGS = {
+    "gatesvr": ("--gate-config", "gate.yaml"),
+    "lobbysvr": ("--lobby-config", "lobby.yaml"),
+}
 
 
 def main() -> None:
@@ -53,6 +57,7 @@ def main() -> None:
 
     if not args.dry_run:
         prepare_runtime_dirs(out_dir, services)
+        write_runtime_scripts(out_dir, services)
         write_env(out_dir / "ENV", args.env)
 
     print(f"config done env={args.env} services={','.join(services)}")
@@ -118,6 +123,72 @@ def prepare_runtime_dirs(out_dir: Path, services: list[str]) -> None:
     for service in services:
         for dirname in ("bin", "conf", "log"):
             (out_dir / service / dirname).mkdir(parents=True, exist_ok=True)
+
+
+def write_runtime_scripts(out_dir: Path, services: list[str]) -> None:
+    for service in services:
+        write_service_scripts(out_dir, service)
+    write_all_script(out_dir / "startall.sh", services, "start")
+    write_all_script(out_dir / "stopall.sh", reversed(services), "stop")
+
+
+def write_service_scripts(out_dir: Path, service: str) -> None:
+    service_flag, service_config = service_config_args(service)
+    bin_dir = out_dir / service / "bin"
+    start_content = f"""#!/bin/sh
+DIR=\"$(cd \"$(dirname \"$0\")\" && pwd)\"
+cd "$DIR" || exit 1
+exec ./{service} --pid-file {service}.pid --daemon --common-config ../../common/conf/common.yaml {service_flag} ../conf/{service_config} 1>>../log/{service}.stdout.log 2>>../log/{service}.stderr.log
+"""
+    stop_content = f"""#!/bin/sh
+DIR=\"$(cd \"$(dirname \"$0\")\" && pwd)\"
+cd "$DIR" || exit 1
+if [ ! -f {service}.pid ]; then
+    echo "{service}.pid not found, skip stop."
+    exit 0
+fi
+pid="$(cat {service}.pid)"
+if [ -z "$pid" ]; then
+    echo "{service}.pid is empty, skip stop."
+    exit 0
+fi
+kill -TERM "$pid"
+"""
+    write_executable(bin_dir / "start.sh", start_content)
+    write_executable(bin_dir / "stop.sh", stop_content)
+
+
+def service_config_args(service: str) -> tuple[str, str]:
+    if service in SERVICE_CONFIG_FLAGS:
+        return SERVICE_CONFIG_FLAGS[service]
+    base = service.removesuffix("svr")
+    return f"--{base}-config", f"{base}.yaml"
+
+
+def write_all_script(path: Path, services: Any, action: str) -> None:
+    lines = ["#!/bin/sh", 'DIR="$(cd "$(dirname "$0")" && pwd)"', 'cd "$DIR" || exit 1', "ret=0"]
+    for service in services:
+        lines.extend(
+            [
+                f'echo "=== {action} {service} ==="',
+                f'./{service}/bin/{action}.sh',
+                'code=$?',
+                'if [ "$code" -ne 0 ]; then',
+                '    ret=$code',
+                'fi',
+            ]
+        )
+    lines.append('exit "$ret"')
+    write_executable(path, "\n".join(lines) + "\n")
+
+
+def write_executable(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    try:
+        path.chmod(0o755)
+    except OSError:
+        pass
 
 
 def write_env(path: Path, env: str) -> None:

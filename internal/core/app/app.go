@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"project/internal/core/logger"
+	"project/internal/core/process"
 )
 
 type App interface {
@@ -138,7 +139,7 @@ func (app *BaseApp) startPprof() {
 }
 
 func (app *BaseApp) runLoop() {
-	signal.Notify(app.sigChan, appSignals()...)
+	signal.Notify(app.sigChan, process.WatchedSignals()...)
 	defer signal.Stop(app.sigChan)
 wait:
 	for {
@@ -150,13 +151,13 @@ wait:
 		case sig := <-app.sigChan:
 			logger.Main.Warn("app sigChan", logger.String("signal", sig.String()))
 			switch {
-			case isShutdownSignal(sig):
+			case process.IsTerminateSignal(sig):
 				// 收到普通停服信号，进入普通停服流程
 				break wait
-			case isDrainShutdownSignal(sig):
+			case process.IsDrainSignal(sig):
 				// 收到优雅停服信号，先停止接入，再等待存量逻辑结束
 				break wait
-			case isReloadSignal(sig):
+			case process.IsReloadSignal(sig):
 				// 收到热更信号，执行热更流程；当前先不处理热更逻辑
 				continue
 			default:
