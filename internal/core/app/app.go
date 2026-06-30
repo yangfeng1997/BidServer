@@ -7,6 +7,8 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
+	"sync"
+
 	"project/internal/core/logger"
 	"project/internal/core/process"
 )
@@ -17,6 +19,8 @@ type App interface {
 	Reload() error
 	DieChan() chan bool
 	DieNotifyChan() <-chan bool
+	AddRoutine(delta int)
+	DoneRoutine()
 	IsRunning() bool
 	IsDaemon() bool
 	RegisterModule(module Module) error
@@ -27,6 +31,7 @@ type BaseApp struct {
 	dieChan       chan bool      // 进程内调用 Shutdown 后，会写入
 	sigChan       chan os.Signal // 进程收到信号后会写入
 	dieNotifyChan chan bool
+	wg            sync.WaitGroup
 
 	running       bool
 	daemon        bool
@@ -101,12 +106,13 @@ func (app *BaseApp) Startup() error {
 	// 如果 dieChan 还没关闭且没有值：走 default，执行 close(app.dieChan)，上面的 select 中会把值读取
 	app.Shutdown()
 	app.shutdownAllModules()
-	app.shutdownAllHooks()
 	// 通知没有注册成 module 的 goroutine，close 一个 chan，会广播给所有关注的 goroutine
 	// 触发来源单一，可直接关闭
 	close(app.dieNotifyChan)
+	app.waitRoutines()
 
 	logger.Main.Info("-------------------- app has been shutdown --------------------")
+	app.shutdownAllHooks()
 	return nil
 }
 
@@ -120,16 +126,15 @@ func (app *BaseApp) startPprof() {
 	}
 
 	server := &http.Server{Addr: addr, Handler: nil}
-	// shutdown hook 注册规则：谁创建资源，谁负责注册关闭逻辑。
-	// pprof server 由 BaseApp 在这里创建，所以关闭 hook 也在这里注册；
-	// builder 创建的基础设施在 builder 注册，module 自己创建的业务资源放到 module.Shutdown。
 	app.shutdownHooks = append(app.shutdownHooks, func() {
 		if err := server.Close(); err != nil && err != http.ErrServerClosed {
 			logger.Main.Error("close pprof server failed", logger.Err(err))
 		}
 	})
 
+	app.AddRoutine(1)
 	go func() {
+		defer app.DoneRoutine()
 		logger.Main.Info("pprof server start", logger.String("addr", addr))
 		// Handler 为 nil 时使用默认路由器；http/pprof 的 init 会注册到 http.DefaultServeMux
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -209,6 +214,18 @@ func (app *BaseApp) DieChan() chan bool {
 
 func (app *BaseApp) DieNotifyChan() <-chan bool {
 	return app.dieNotifyChan
+}
+
+func (app *BaseApp) AddRoutine(delta int) {
+	app.wg.Add(delta)
+}
+
+func (app *BaseApp) DoneRoutine() {
+	app.wg.Done()
+}
+
+func (app *BaseApp) waitRoutines() {
+	app.wg.Wait()
 }
 
 func (app *BaseApp) IsRunning() bool {

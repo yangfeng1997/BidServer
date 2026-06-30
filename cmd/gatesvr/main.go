@@ -21,6 +21,7 @@ func main() {
 func execute() error {
 	opts := &gate.Options{}
 	bindFlags(opts)
+	configureUsage("gatesvr")
 	pflag.Parse()
 	if pflag.NArg() > 0 {
 		return fmt.Errorf("unexpected args: %v", pflag.Args())
@@ -76,4 +77,14 @@ func bindFlags(opts *gate.Options) {
 	pflag.BoolVar(&opts.Daemon, "daemon", false, "run as daemon")
 	pflag.BoolVar(&opts.Pprof, "pprof", false, "enable pprof server")
 	pflag.StringVar(&opts.PprofAddr, "pprof-addr", "127.0.0.1:6060", "pprof listen address")
+}
+
+func configureUsage(name string) {
+	pflag.CommandLine.SortFlags = false
+	pflag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "%s starts a gate server.\n\n", name)
+		fmt.Fprintf(os.Stderr, "Usage:\n  %s [flags]\n\n", name)
+		fmt.Fprintln(os.Stderr, "Flags:")
+		pflag.PrintDefaults()
+	}
 }

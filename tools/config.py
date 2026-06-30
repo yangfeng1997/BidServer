@@ -138,7 +138,13 @@ def write_service_scripts(out_dir: Path, service: str) -> None:
     start_content = f"""#!/bin/sh
 DIR=\"$(cd \"$(dirname \"$0\")\" && pwd)\"
 cd "$DIR" || exit 1
-exec ./{service} --pid-file {service}.pid --daemon --common-config ../../common/conf/common.yaml {service_flag} ../conf/{service_config} 1>>../log/{service}.stdout.log 2>>../log/{service}.stderr.log
+LOG_DIR="../log"
+STDOUT_LOG="$LOG_DIR/{service}.stdout.log"
+STDERR_LOG="$LOG_DIR/{service}.stderr.log"
+mkdir -p "$LOG_DIR"
+: > "$STDOUT_LOG"
+: > "$STDERR_LOG"
+exec ./{service} --pid-file {service}.pid --daemon --common-config ../../common/conf/common.yaml {service_flag} ../conf/{service_config} 1>>"$STDOUT_LOG" 2>>"$STDERR_LOG"
 """
     stop_content = f"""#!/bin/sh
 DIR=\"$(cd \"$(dirname \"$0\")\" && pwd)\"
