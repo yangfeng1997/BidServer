@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package cluster;
+
+option go_package = "project/src/framework/cluster/pb";
+
+// NodeInfo etcd value，节点的完整信息
+message NodeInfo {
+  string node_id          = 1; // NodeID 点分格式，如 "1.2.1"
+  string server_type_name = 2; // 服务类型名称，如 "lobbysvr"
+  string subject          = 3; // NATS subject，等于 node_id
+  string addr             = 4; // 对外地址
+  int64  start_time       = 5; // Unix 时间戳
+}
+
+// ClusterSession 集群间传递的轻量 session 数据（纯数据，不含连接状态）
+message ClusterSession {
+  int64  id          = 1;
+  int64  uid         = 2;
+  string ip          = 3;
+  string frontend_id = 4;
+  bytes  data        = 5; // session.data 序列化后的字节
+  uint32 client_mid  = 6; // 客户端原始 MID，0 表示 OneWay（gate 转发时填入）
+  uint32 msg_type    = 7; // 对应 message.Type：1=Request, 3=OneWay
+}
+
+// ClusterMessage 集群内部 RPC 请求封装
+message ClusterMessage {
+  string         from       = 1; // 发送方 NodeID.Subject()
+  string         route      = 2; // 目标 handler route（由 msg_id 查路由表得到）
+  bytes          data       = 3; // 业务 payload（protobuf 序列化）
+  ClusterSession session    = 4; // 可选，调用方 session
+  string         trace_id   = 5; // 链路追踪 ID
+  int64          deadline   = 6; // 超时截止时间，Unix 纳秒；0 表示不限
+}
+
+// ClusterResponse 集群内部 RPC 响应封装
+message ClusterResponse {
+  bytes  data    = 1; // 返回数据（protobuf 序列化）
+  string err_msg = 2; // 错误信息，空表示成功
+}

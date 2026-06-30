@@ -1,0 +1,47 @@
+syntax = "proto3";
+package conf;
+option go_package = "project/conf/schema/gen";
+import "conf/schema/options.proto";
+
+message Common {
+  Redis  redis      = 1;
+  Etcd   etcd       = 2;
+  Nats   nats       = 3;
+  Mongo  mongo      = 4;
+  Log    log        = 5;
+  string version    = 6;
+  string region     = 7;
+  string excel_path = 8;
+}
+
+message Redis {
+  string host     = 1 [(conf.required) = true];
+  int32  port     = 2 [(conf.required) = true];
+  int32  timeout  = 3;
+  string password = 4 [(conf.env) = true, (conf.required) = true];
+}
+
+message Etcd {
+  repeated string endpoints         = 1 [(conf.required) = true];
+  int32           lease_ttl         = 2;
+  int32           dial_timeout_sec  = 3;
+  int32           sync_interval_sec = 4;
+  int32           max_retries       = 5;
+  string          key_prefix        = 6;
+  int32           shutdown_delay_ms = 7;
+}
+
+message Nats {
+  repeated string urls              = 1 [(conf.required) = true];
+  int32           reconnect_wait_ms = 2;
+}
+
+message Mongo {
+  string uri      = 1 [(conf.env) = true, (conf.required) = true];
+  string database = 2;
+}
+
+message Log {
+  string level = 1 [(conf.reload) = true];
+  string dir   = 2;
+}

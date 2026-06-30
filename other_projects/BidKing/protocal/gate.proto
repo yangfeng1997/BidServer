@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package gate;
+
+option go_package = "project/protocal/gen/gate";
+
+import "protocal/options.proto";
+
+// --- 客户端 → 网关（gate 本地处理） ---
+
+// CS_Login_Req 登录请求
+message CS_Login_Req {
+  option (options.msg_id)         = 1001;
+  option (options.handler_method) = "GateHandler.login";
+  // 无 server_type：gate 本地处理，不转发
+  string token    = 1;
+  string platform = 2;
+}
+
+// CS_Heartbeat_OneWay 客户端心跳（无返回）
+message CS_Heartbeat_OneWay {
+  option (options.msg_id)         = 1003;
+  option (options.handler_method) = "GateHandler.heartbeat";
+  int64 client_time = 1;
+}
+
+// CS_Logout_OneWay 退出登录（无返回）
+message CS_Logout_OneWay {
+  option (options.msg_id)         = 1005;
+  option (options.handler_method) = "GateHandler.logout";
+}
+
+// --- 网关 → 客户端 ---
+
+// SC_Login_Rsp 登录响应
+message SC_Login_Rsp {
+  option (options.msg_id) = 1002;
+  int32  code    = 1; // 0=成功
+  int64  uid     = 2;
+  string message = 3;
+}
+
+// SC_Kick 服务器踢人通知
+message SC_Kick {
+  option (options.msg_id) = 1004;
+  int32  reason  = 1;
+  string message = 2;
+}
+
+// RPC_PushToClient 后端 → gate：把已按 client 序列化器(json) marshal 的 body 推给 uid
+// （route="GateHandler.pushtoclient"，单向，无 msg_id，按 route Cast 到具体 gate 节点）
+message RPC_PushToClient {
+  int64  uid    = 1;
+  uint32 msg_id = 2;
+  bytes  body   = 3;
+}

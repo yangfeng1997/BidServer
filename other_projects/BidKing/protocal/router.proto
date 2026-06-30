@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package router;
+
+option go_package = "project/protocal/gen/router";
+
+// RoutingMode 转发路由模式（P2 仅用 CONSISTENT_HASH；ANY/DIRECT 预留 P4 match/room）
+enum RoutingMode {
+  ROUTING_CONSISTENT_HASH = 0; // 按 routing_key 一致性哈希选分片
+  ROUTING_ANY             = 1; // 随机一个该类型实例（P4）
+  ROUTING_DIRECT          = 2; // routing_key 即目标 NodeID 串（P4）
+}
+
+// RPC_RouterForward_Req lobby → router 的统一转发信封（route="RouterHandler.forward"）
+message RPC_RouterForward_Req {
+  RoutingMode routing_mode = 1;
+  string      target_type  = 2; // 目标服务类型名，如 "onlinesvr"
+  string      routing_key  = 3; // CONSISTENT_HASH:uid 串；DIRECT:NodeID 串
+  string      inner_route  = 4; // 真实业务 route，如 "OnlineHandler.register"
+  bytes       inner_data   = 5; // 已序列化的真实业务请求
+}
+
+// RPC_RouterForward_Rsp router 回 lobby
+message RPC_RouterForward_Rsp {
+  int32  code       = 1; // 0=ok；非 0=router 侧错误
+  string err_msg    = 2;
+  bytes  inner_data = 3; // 真实业务响应原样透传
+}

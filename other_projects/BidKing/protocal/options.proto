@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package options;
+
+option go_package = "project/protocal/gen/options";
+
+import "google/protobuf/descriptor.proto";
+
+extend google.protobuf.MessageOptions {
+  // msg_id 消息数字 ID，客户端和服务器用数字路由，替代字符串 route 在网络上传输
+  // 分段规则：
+  //   1    - 999  : 系统/握手
+  //   1000 - 1999 : gatesvr
+  //   2000 - 2999 : lobbysvr
+  //   3000 - 3999 : （已释放，预留扩展）
+  //   4000 - 4999 : （已释放，预留扩展）
+  //   5000+       : 预留扩展
+  uint32 msg_id      = 50001;
+
+  // server_type 目标服务类型，gate 用来决定转发给哪种服务
+  // 只在 Req/OneWay 消息上设置，Rsp 消息不需要
+  string server_type = 50002;
+
+  // handler_method 对应的 handler 方法名，用于生成路由表
+  // 格式："TypeName.methodname"，如 "LobbyHandler.additem"
+  // 不设置时由代码生成工具按消息名自动推导
+  string handler_method = 50003;
+}

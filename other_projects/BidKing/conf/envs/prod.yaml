@@ -1,0 +1,29 @@
+# conf/values/prod.yaml — prod 环境取值（敏感字段用大写占位符，由部署平台注入）
+svr_list:
+  - gatesvr
+  - lobbysvr
+  - onlinesvr
+  - routersvr
+  - matchsvr
+  - roomsvr
+redis_host: "redis.internal"
+redis_port: 6379
+etcd_endpoints:
+  - "etcd-1.internal:2379"
+  - "etcd-2.internal:2379"
+  - "etcd-3.internal:2379"
+nats_urls:
+  - "nats://nats-1.internal:4222"
+  - "nats://nats-2.internal:4222"
+gate_node_id: ${GATE_NODE_ID}
+gate_addr: ${GATE_ADDR}
+lobby_node_id: ${LOBBY_NODE_ID}
+lobby_addr: ${LOBBY_ADDR}
+online_node_id: ${ONLINE_NODE_ID}
+online_addr: ${ONLINE_ADDR}
+router_node_id: ${ROUTER_NODE_ID}
+router_addr: ${ROUTER_ADDR}
+room_node_id: ${ROOM_NODE_ID}
+room_addr: ${ROOM_ADDR}
+match_node_id: ${MATCH_NODE_ID}
+match_addr: ${MATCH_ADDR}

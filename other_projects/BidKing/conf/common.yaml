@@ -1,0 +1,26 @@
+# conf/common.yaml — CommonConfig 模板；${lowercase} = envs 填充，${UPPER} = 运行时注入
+redis:
+  host: ${redis_host}
+  port: ${redis_port}
+  timeout: 2
+  password: ${REDIS_PWD}
+etcd:
+  endpoints: ${etcd_endpoints}
+  lease_ttl: 10
+  dial_timeout_sec: 5
+  sync_interval_sec: 30
+  max_retries: 10
+  key_prefix: "nodes/"
+  shutdown_delay_ms: 300
+nats:
+  urls: ${nats_urls}
+  reconnect_wait_ms: 1000
+mongo:
+  uri: ${MONGO_URI}
+  database: game
+log:
+  level: info
+  dir: ./logs
+version: "1.0.0"
+region: "default"
+excel_path: ./data/excel

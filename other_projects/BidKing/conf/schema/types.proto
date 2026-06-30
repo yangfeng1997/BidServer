@@ -1,0 +1,9 @@
+syntax = "proto3";
+package conf;
+option go_package = "project/conf/schema/gen";
+
+message AppStartup {
+  repeated string pre_application_list      = 1;
+  string          pre_application_path      = 2;
+  repeated string pre_mine_application_list = 3;
+}

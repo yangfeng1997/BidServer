@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package match;
+
+option go_package = "project/protocal/gen/match";
+
+// MatchRequest 匹配请求：既是 JetStream payload，也是 router publishmatch 入参（纯服务间，无 msg_id）
+message MatchRequest {
+  int64  uid           = 1;
+  string req_id        = 2; // 幂等键：matchsvr 消费侧按 (uid, req_id) 去重
+  int64  mmr           = 3;
+  string lobby_node_id = 4; // 发起匹配的 lobby NodeID 串（回告 DIRECT 的 routing_key）
+}
+
+// RPC_PublishMatch_Rsp router 发布响应（req 直接复用 MatchRequest，route="RouterHandler.publishmatch"）
+message RPC_PublishMatch_Rsp {
+  int32 code = 1; // 0=已发布到 MATCH stream；非 0=发布失败
+}
+
+// RPC_GameStarted_Req match → lobby 开局回告（经 router DIRECT，route="LobbyHandler.gamestarted"）
+message RPC_GameStarted_Req {
+  int64  uid          = 1;
+  string game_id      = 2;
+  string room_node_id = 3;
+  string currency     = 4; // 竞拍币种，lobby 置入 roomAffinity 供出价 CanAfford
+}
+message RPC_GameStarted_Rsp {
+  int32 code = 1; // 0=lobby 已置亲和；负=玩家未加载等失败
+}
+
+// RPC_MatchTimeout_Notify matchsvr → lobby 匹配超时回告（经 router DIRECT，route="LobbyHandler.matchtimeout"，Cast）
+message RPC_MatchTimeout_Notify {
+  int64  uid    = 1;
+  string req_id = 2;
+}

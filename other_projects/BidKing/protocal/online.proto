@@ -1,0 +1,77 @@
+syntax = "proto3";
+
+package online;
+
+option go_package = "project/protocal/gen/online";
+
+// OnlineEntry 在线条目（Query 返回用）
+message OnlineEntry {
+  int64  uid             = 1;
+  string gateway_node_id = 2;
+  string lobby_node_id   = 3;
+  int64  login_time      = 4; // Unix 纳秒
+  int64  last_active     = 5; // Unix 纳秒
+  string room_node_id    = 6; // 当前所属 room NodeID 串（未在局为空）
+  string game_id         = 7; // 当前对局 gameId（未在局为空）
+}
+
+// RPC_Register_Req lobby（经 router）注册在线（route="OnlineHandler.register"）
+message RPC_Register_Req {
+  int64  uid             = 1;
+  string gateway_node_id = 2;
+  string lobby_node_id   = 3;
+}
+message RPC_Register_Rsp {
+  int32 code       = 1;
+  bool  kicked_old = 2; // 是否触发了顶号
+}
+
+// RPC_Query_Req 定位玩家（route="OnlineHandler.query"）
+message RPC_Query_Req {
+  int64 uid = 1;
+}
+message RPC_Query_Rsp {
+  bool        online = 1;
+  OnlineEntry entry  = 2;
+}
+
+// RPC_Unregister_Req 注销（route="OnlineHandler.unregister"）
+message RPC_Unregister_Req {
+  int64 uid = 1;
+}
+message RPC_Unregister_Rsp {
+  int32 code = 1;
+}
+
+// RPC_Touch_Req 刷新活跃（route="OnlineHandler.touch"）
+message RPC_Touch_Req {
+  int64 uid = 1;
+}
+message RPC_Touch_Rsp {
+  int32 code   = 1;
+  bool  online = 2; // 目标不在线则 false
+}
+
+// RPC_KickSession_Notify online → 旧 gateway 的顶号通知（route="GateHandler.kicksession"，单向）
+message RPC_KickSession_Notify {
+  int64 uid    = 1;
+  int32 reason = 2; // 1=重复登录被顶
+}
+
+// RPC_BindRoom_Req 绑定 room 亲和（route="OnlineHandler.bindroom"，绝对覆盖写）
+message RPC_BindRoom_Req {
+  int64  uid          = 1;
+  string room_node_id = 2;
+  string game_id      = 3;
+}
+message RPC_BindRoom_Rsp {
+  int32 code = 1; // 0=已绑定；非 0=条目不在线
+}
+
+// RPC_UnbindRoom_Req 清除 room 亲和（route="OnlineHandler.unbindroom"；P4a 仅建 handler，wiring 留 P4b）
+message RPC_UnbindRoom_Req {
+  int64 uid = 1;
+}
+message RPC_UnbindRoom_Rsp {
+  int32 code = 1;
+}

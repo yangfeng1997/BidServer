@@ -1,0 +1,273 @@
+syntax = "proto3";
+
+package lobby;
+
+option go_package = "project/protocal/gen/lobby";
+
+import "protocal/options.proto";
+
+// --- gateway ↔ lobby 集群 RPC（RPC_ 前缀，服务间调用） ---
+
+// RPC_Login_Req gateway 转发给 lobby 的登录请求
+message RPC_Login_Req {
+  option (options.msg_id)         = 2001;
+  option (options.server_type)    = "lobbysvr";
+  option (options.handler_method) = "LobbyHandler.login";
+  string token    = 1;
+  string platform = 2;
+}
+
+// RPC_Login_Rsp lobby 返回给 gateway 的登录响应
+message RPC_Login_Rsp {
+  option (options.msg_id) = 2002;
+  int32  code          = 1; // 0=成功，负数=失败
+  int64  uid           = 2;
+  string lobby_node_id = 3; // 处理本次登录的 lobby 节点 ID（点分），gateway 据此绑定
+}
+
+// RPC_PlayerDisconnect_Notify gateway → lobby 的断连通知（route="LobbyHandler.playerdisconnect"，单向）
+message RPC_PlayerDisconnect_Notify {
+  int64 uid = 1;
+}
+
+// --- 客户端 ↔ lobby 背包业务 ---
+
+// BagItem 背包条目
+message BagItem {
+  int32 item_id = 1;
+  int32 count   = 2;
+}
+
+// CS_AddItem 加道具请求
+message CS_AddItem {
+  option (options.msg_id)         = 2003;
+  option (options.server_type)    = "lobbysvr";
+  option (options.handler_method) = "LobbyHandler.additem";
+  string op_id   = 1; // 幂等键
+  int32  item_id = 2;
+  int32  count   = 3;
+}
+
+// SC_AddItem 加道具响应
+message SC_AddItem {
+  option (options.msg_id) = 2004;
+  int32 item_id = 1;
+  int32 count   = 2; // 操作后数量
+}
+
+// CS_BagList 查询背包请求
+message CS_BagList {
+  option (options.msg_id)         = 2005;
+  option (options.server_type)    = "lobbysvr";
+  option (options.handler_method) = "LobbyHandler.baglist";
+}
+
+// SC_BagList 背包列表响应
+message SC_BagList {
+  option (options.msg_id) = 2006;
+  repeated BagItem items = 1;
+}
+
+// --- gateway → lobby：活跃心跳中转（route="LobbyHandler.touch"，单向，无 msg_id，按 route Cast） ---
+message RPC_Touch_Notify {
+  int64 uid = 1;
+}
+
+// --- 客户端 ↔ lobby 货币 ---
+message CurrencyAmount {
+  string kind   = 1; // 币种，如 "gold"/"diamond"
+  int64  amount = 2;
+}
+
+message CS_CurrencyQuery {
+  option (options.msg_id)         = 2007;
+  option (options.server_type)    = "lobbysvr";
+  option (options.handler_method) = "LobbyHandler.currencyquery";
+}
+message SC_CurrencyQuery {
+  option (options.msg_id) = 2008;
+  repeated CurrencyAmount balances = 1;
+}
+
+// CS_Purchase 购买道具（显式编排：扣币 + 加道具，同 op_id 幂等）
+message CS_Purchase {
+  option (options.msg_id)         = 2009;
+  option (options.server_type)    = "lobbysvr";
+  option (options.handler_method) = "LobbyHandler.purchase";
+  string op_id   = 1;
+  string kind    = 2; // 支付币种
+  int64  price   = 3;
+  int32  item_id = 4;
+}
+message SC_Purchase {
+  option (options.msg_id) = 2010;
+  int32 code        = 1; // 0=成功，1=余额不足
+  int64 balance     = 2; // 该币种新余额
+  int32 item_count  = 3; // 该道具新数量
+}
+
+// --- 客户端 ↔ lobby 好友 ---
+message FriendEntry {
+  int64 uid    = 1;
+  bool  online = 2;
+}
+message CS_FriendList {
+  option (options.msg_id)         = 2011;
+  option (options.server_type)    = "lobbysvr";
+  option (options.handler_method) = "LobbyHandler.friendlist";
+}
+message SC_FriendList {
+  option (options.msg_id) = 2012;
+  repeated FriendEntry friends = 1;
+}
+
+message CS_FriendAdd {
+  option (options.msg_id)         = 2013;
+  option (options.server_type)    = "lobbysvr";
+  option (options.handler_method) = "LobbyHandler.friendadd";
+  int64 target = 1;
+}
+message SC_FriendAdd {
+  option (options.msg_id) = 2014;
+  int32 code = 1; // 0=请求已发出，1=非法目标，2=已是好友
+}
+
+message CS_FriendRespond {
+  option (options.msg_id)         = 2015;
+  option (options.server_type)    = "lobbysvr";
+  option (options.handler_method) = "LobbyHandler.friendrespond";
+  string mail_id = 1; // friend_req 邮件 id（hex）
+  bool   accept  = 2;
+}
+message SC_FriendRespond {
+  option (options.msg_id) = 2016;
+  int32 code = 1; // 0=成功，1=邮件不存在/已处理
+}
+
+message CS_FriendRemove {
+  option (options.msg_id)         = 2017;
+  option (options.server_type)    = "lobbysvr";
+  option (options.handler_method) = "LobbyHandler.friendremove";
+  int64 target = 1;
+}
+message SC_FriendRemove {
+  option (options.msg_id) = 2018;
+  int32 code = 1;
+}
+
+// --- 客户端 ↔ lobby 邮件 ---
+message Attachment {
+  string kind  = 1; // "currency"/"item"
+  int64  id    = 2; // 币种走 kind+0；道具走 item_id
+  int64  count = 3;
+}
+message MailItem {
+  string mail_id = 1; // hex
+  int64  from    = 2;
+  string type    = 3; // normal/friend_req/friend_accept
+  string body    = 4;
+  int64  ts      = 5;
+  bool   claimed = 6;
+  repeated Attachment attachments = 7;
+}
+message CS_MailList {
+  option (options.msg_id)         = 2019;
+  option (options.server_type)    = "lobbysvr";
+  option (options.handler_method) = "LobbyHandler.maillist";
+}
+message SC_MailList {
+  option (options.msg_id) = 2020;
+  repeated MailItem mails = 1;
+}
+
+message CS_MailClaim {
+  option (options.msg_id)         = 2021;
+  option (options.server_type)    = "lobbysvr";
+  option (options.handler_method) = "LobbyHandler.mailclaim";
+  string mail_id = 1;
+}
+message SC_MailClaim {
+  option (options.msg_id) = 2022;
+  int32 code = 1; // 0=已领取，1=不存在/已领取
+  repeated Attachment granted = 2;
+}
+
+// --- 客户端 ↔ lobby 匹配 ---
+
+// CS_StartMatch 发起匹配请求（无业务字段；reqId 由 lobby 生成）
+message CS_StartMatch {
+  option (options.msg_id)         = 2034;
+  option (options.server_type)    = "lobbysvr";
+  option (options.handler_method) = "LobbyHandler.startmatch";
+}
+
+// SC_StartMatch 发起匹配响应
+message SC_StartMatch {
+  option (options.msg_id) = 2035;
+  int32 code = 1; // 0=已入队；1=已在局中；负=失败（未加载等）
+}
+
+// --- 服务器 → 客户端 推送（仅 msg_id，gate 据此推；无 server_type/handler_method） ---
+message SC_FriendPresence {
+  option (options.msg_id) = 2031;
+  int64 uid    = 1; // 上/下线的好友 uid
+  bool  online = 2;
+}
+message SC_MailNew {
+  option (options.msg_id) = 2033;
+  int64 from = 1;
+  string type = 2;
+}
+// SC_MatchFound 匹配成功推送（仅 msg_id，gate 据此推；无 server_type/handler_method）
+message SC_MatchFound {
+  option (options.msg_id) = 2036;
+  string room_node_id = 1;
+  string game_id      = 2;
+}
+
+// --- 客户端 ↔ lobby 竞拍出价 ---
+message CS_Bid {
+  option (options.msg_id)         = 2037;
+  option (options.server_type)    = "lobbysvr";
+  option (options.handler_method) = "LobbyHandler.bid";
+  string game_id = 1;
+  int64  amount  = 2;
+}
+message SC_Bid {
+  option (options.msg_id) = 2038;
+  int32 code        = 1; // 0=接受；1=已封盘；2=非局中/亲和不符；3=未高于最高价；4=余额不足
+  int64 highest_bid = 2;
+}
+// SC_AuctionState 拍卖态广播（仅 msg_id，gate 据此推）
+message SC_AuctionState {
+  option (options.msg_id) = 2039;
+  string game_id             = 1;
+  int64  highest_bid         = 2;
+  int64  highest_bidder      = 3;
+  int32  countdown_remaining = 4;
+}
+// SC_AuctionResult 结算结果广播（仅 msg_id）
+message SC_AuctionResult {
+  option (options.msg_id) = 2040;
+  string game_id  = 1;
+  int64  winner   = 2;
+  int64  price    = 3;
+  int32  item_id  = 4;
+  string currency = 5;
+}
+// SC_MatchTimeout 匹配超时推送（仅 msg_id）
+message SC_MatchTimeout {
+  option (options.msg_id) = 2041;
+}
+
+// SC_ReconnectAuction 重连接回拍卖态快照 / 作废通知（仅 msg_id，gate 据此推）
+message SC_ReconnectAuction {
+  option (options.msg_id) = 2042;
+  string game_id             = 1;
+  int64  highest_bid         = 2;
+  int64  highest_bidder      = 3;
+  int32  countdown_remaining = 4;
+  int32  item_id             = 5;
+  string currency            = 6;
+  int32  status              = 7; // 0=active 接回快照；1=voided 作废
+}

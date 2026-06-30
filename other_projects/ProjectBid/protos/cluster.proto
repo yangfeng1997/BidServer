@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package protos;
+
+option go_package = "projectbid/server/protos";
+
+// RPCType 表示 RPC 调用类型。
+enum RPCType {
+  RPC_TYPE_SYS = 0;
+  RPC_TYPE_USER = 1;
+}
+
+// MsgType 表示消息类型。
+enum MsgType {
+  MSG_TYPE_REQUEST = 0;
+  MSG_TYPE_NOTIFY = 1;
+}
+
+// Error 跨服务传输的错误信息。
+message Error {
+  string code = 1;
+  string msg = 2;
+  map<string, string> metadata = 3;
+}
+
+// Msg 跨服务传输的消息体。
+message Msg {
+  string route = 1;
+  MsgType type = 2;
+  bytes data = 3;
+  uint64 id = 4;
+}
+
+// Session 跨服务传输的会话数据。
+message Session {
+  int64 id = 1;
+  string uid = 2;
+  bytes data = 3; // JSON 序列化的 map[string]interface{}
+}
+
+// Request RPC 请求。
+message Request {
+  RPCType type = 1;
+  Msg msg = 2;
+  map<string, string> metadata = 3;
+  string frontend_id = 4;
+  Session session = 5;
+}
+
+// Response RPC 响应。
+message Response {
+  bytes data = 1;
+  Error error = 2;
+}
+
+// Push 推送消息。
+message Push {
+  string route = 1;
+  bytes data = 2;
+}
+
+// KickMsg 踢下线消息。
+message KickMsg {
+  string user_id = 1;
+}

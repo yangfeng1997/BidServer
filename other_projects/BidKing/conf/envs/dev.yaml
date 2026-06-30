@@ -1,0 +1,26 @@
+# conf/values/dev.yaml — dev 环境取值（填小写占位符）
+svr_list:
+  - gatesvr
+  - lobbysvr
+  - onlinesvr
+  - routersvr
+  - matchsvr
+  - roomsvr
+redis_host: "127.0.0.1"
+redis_port: 6379
+etcd_endpoints:
+  - "localhost:2379"
+nats_urls:
+  - "nats://localhost:4222"
+gate_node_id: "1.1.1"
+gate_addr: "0.0.0.0:8888"
+lobby_node_id: "1.2.1"
+lobby_addr: "0.0.0.0:8801"
+online_node_id: "1.5.1"
+online_addr: "0.0.0.0:8851"
+router_node_id: "1.6.1"
+router_addr: "0.0.0.0:8861"
+room_node_id: "1.7.1"
+room_addr: "0.0.0.0:8871"
+match_node_id: "1.8.1"
+match_addr: "0.0.0.0:8881"

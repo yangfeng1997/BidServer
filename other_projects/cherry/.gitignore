@@ -1,0 +1,10 @@
+
+# Default ignored files
+.idea/
+.vscode/
+.claude/
+bin/
+logs/
+*.exe
+go.work
+go.work.sum

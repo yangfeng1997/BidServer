@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package simple;
+
+option go_package = "projectbid/server/examples/simple/pb;pb";
+
+message HelloRequest {
+  string name = 1;
+}
+
+message HelloResponse {
+  string message = 1;
+}

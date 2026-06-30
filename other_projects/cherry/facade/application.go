@@ -1,0 +1,61 @@
+// Package cherryFacade defines the core interfaces for the Cherry framework.
+//
+// This file defines application-level abstractions:
+//   - INode: node identity and configuration
+//   - IApplication: the application container — component registry, lifecycle, service accessors
+//   - ProfileJSON: typed profile/config reader
+package cherryFacade
+
+import (
+	"time"
+
+	jsoniter "github.com/json-iterator/go"
+)
+
+type (
+	// INode represents a cluster node's identity and configuration.
+	INode interface {
+		NodeID() string        // globally unique node ID
+		NodeType() string      // node type (e.g. "game", "gate", "map")
+		Address() string       // public listen address (for frontend nodes)
+		RpcAddress() string    // RPC listen address (reserved)
+		Settings() ProfileJSON // node settings from profile
+		Enabled() bool         // whether this node is enabled
+	}
+
+	IApplication interface {
+		INode
+		Running() bool                     // whether the application is running
+		DieChan() chan bool                // closed when application shuts down
+		IsFrontend() bool                  // whether this is a frontend node
+		Register(components ...IComponent) // register components (before startup)
+		Find(name string) IComponent       // find a component by name
+		Remove(name string) IComponent     // remove a component by name
+		All() []IComponent                 // list all registered components
+		OnShutdown(fn ...func())           // register shutdown hooks (called in registration order)
+		Startup()                          // start the application (blocks until shutdown)
+		Shutdown()                         // shut down the application
+		Serializer() ISerializer           // message serializer
+		Discovery() IDiscovery             // node discovery service
+		Cluster() ICluster                 // cluster messaging service
+		ActorSystem() IActorSystem         // Actor system
+	}
+
+	// ProfileJSON is a typed profile/config reader backed by jsoniter.
+	ProfileJSON interface {
+		jsoniter.Any
+		GetConfig(path ...any) ProfileJSON
+		GetString(path any, defaultVal ...string) string
+		GetBool(path any, defaultVal ...bool) bool
+		GetInt(path any, defaultVal ...int) int
+		GetInt32(path any, defaultVal ...int32) int32
+		GetInt64(path any, defaultVal ...int64) int64
+		GetUint(path any, defaultVal ...uint) uint
+		GetUint32(path any, defaultVal ...uint32) uint32
+		GetUint64(path any, defaultVal ...uint64) uint64
+		GetFloat32(path any, defaultVal ...float32) float32
+		GetFloat64(path any, defaultVal ...float64) float64
+		GetDuration(path any, defaultVal ...time.Duration) time.Duration
+		Unmarshal(ptrVal any) error
+	}
+)

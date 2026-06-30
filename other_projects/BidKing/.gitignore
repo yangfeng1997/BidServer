@@ -1,0 +1,50 @@
+# Binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+
+# Output of go coverage tool
+*.out
+
+# Go workspace
+go.work
+go.work.sum
+
+# Dependency directories
+vendor/
+
+# Build output
+*.a
+*.o
+
+# IDE
+.idea/
+.vscode/
+*.code-workspace
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Local config overrides
+conf/server.local.yaml
+
+# config_build 产物（按服务/环境烘焙生成，不入库）
+run/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/

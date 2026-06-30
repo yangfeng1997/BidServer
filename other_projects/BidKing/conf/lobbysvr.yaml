@@ -1,0 +1,8 @@
+# conf/lobbysvr.yaml — LobbySvr 私有配置模板
+app_startup:
+  pre_application_list: []
+  pre_application_path: ./bin
+  pre_mine_application_list: []
+node_id: ${lobby_node_id}
+server_type_name: lobbysvr
+addr: ${lobby_addr}

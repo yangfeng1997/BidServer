@@ -1,0 +1,12 @@
+syntax = "proto3";
+package conf;
+option go_package = "project/conf/schema/gen";
+import "conf/schema/types.proto";
+import "conf/schema/options.proto";
+
+message OnlineSvr {
+  AppStartup app_startup             = 1;
+  string  node_id          = 2 [(conf.required) = true];
+  string  server_type_name = 3 [(conf.required) = true];
+  string  addr             = 4 [(conf.required) = true];
+}

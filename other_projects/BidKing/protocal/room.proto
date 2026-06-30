@@ -1,0 +1,82 @@
+syntax = "proto3";
+
+package room;
+
+option go_package = "project/protocal/gen/room";
+
+// Participant 开局参与者
+message Participant {
+  int64  uid           = 1;
+  string lobby_node_id = 2;
+}
+
+// RPC_OpenGame_Req match → room 开局（经 router CONSISTENT_HASH key=game_id，route="RoomHandler.opengame"）
+message RPC_OpenGame_Req {
+  string               game_id       = 1;
+  int32                item_id       = 2;
+  int32                countdown_sec = 3;
+  repeated Participant participants  = 4;
+  string               currency      = 5; // 竞拍币种（matchsvr 设，MVP 默认 "gold"）
+}
+message RPC_OpenGame_Rsp {
+  int32  code         = 1; // 0=已建局（含幂等命中）；非 0=参数非法等
+  string room_node_id = 2; // room 自身 NodeID 串，match 据此回告 lobby
+}
+
+// RPC_Bid_Req lobby → room 出价（经 router DIRECT key=room_node_id，route="RoomHandler.bid"）
+message RPC_Bid_Req {
+  string game_id = 1;
+  int64  uid     = 2;
+  int64  amount  = 3;
+}
+message RPC_Bid_Rsp {
+  int32 code           = 1; // 0=已接受；1=已封盘；2=非参与者/局不存在；3=未高于当前最高价
+  int64 highest_bid    = 2;
+  int64 highest_bidder = 3;
+}
+
+// RPC_AuctionState_Notify room → lobby 广播拍卖态（经 router DIRECT key=lobby_node_id，route="LobbyHandler.auctionstate"，Cast 无回包）
+message RPC_AuctionState_Notify {
+  int64  uid                 = 1;
+  string game_id             = 2;
+  int64  highest_bid         = 3;
+  int64  highest_bidder      = 4;
+  int32  countdown_remaining = 5;
+}
+
+// RPC_Settle_Req room → lobby 结算回告（经 router DIRECT key=lobby_node_id，route="LobbyHandler.settle"）
+message RPC_Settle_Req {
+  int64  uid      = 1;
+  string game_id  = 2;
+  int64  winner   = 3;
+  int64  price    = 4;
+  int32  item_id  = 5;
+  string currency = 6;
+}
+message RPC_Settle_Rsp {
+  int32 code = 1; // 0=已落地（在线扣发或离线投递成功）；非 0=投递失败，room 应重投
+}
+
+// RPC_Rejoin_Req lobby → room 重连改投（经 router DIRECT key=room_node_id，route="RoomHandler.rejoin"）
+message RPC_Rejoin_Req {
+  string game_id        = 1;
+  int64  uid            = 2;
+  string new_lobby_node = 3; // 重连后新 lobby NodeID 串，room 据此改投 participant
+}
+message RPC_Rejoin_Rsp {
+  int32  code                = 1; // 0=接回（存在且未封盘）；1=已封盘；2=局不存在/非参与者
+  int64  highest_bid         = 2;
+  int64  highest_bidder      = 3;
+  int32  countdown_remaining = 4;
+  int32  item_id             = 5;
+  string currency            = 6;
+}
+
+// RPC_QueryGame_Req lobby → room 只读判活（经 router DIRECT key=room_node_id，route="RoomHandler.querygame"）
+message RPC_QueryGame_Req {
+  string game_id = 1;
+}
+message RPC_QueryGame_Rsp {
+  bool exists = 1;
+  bool closed = 2;
+}

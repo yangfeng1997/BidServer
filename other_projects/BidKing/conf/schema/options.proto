@@ -1,0 +1,10 @@
+syntax = "proto3";
+package conf;
+option go_package = "project/conf/schema/gen";
+import "google/protobuf/descriptor.proto";
+
+extend google.protobuf.FieldOptions {
+  bool reload   = 50101;
+  bool env      = 50102;
+  bool required = 50103;
+}
