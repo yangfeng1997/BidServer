@@ -197,3 +197,89 @@ func CheckLobbyReload(candidate *LobbyConfig, current *LobbyConfig) error {
 	}
 	return nil
 }
+
+func CheckRouteragentReload(candidate *RouteragentConfig, current *RouteragentConfig) error {
+	if candidate == nil || current == nil {
+		return nil
+	}
+	if !reflect.DeepEqual(candidate.SockPath, current.SockPath) {
+		return fmt.Errorf("sock_path cannot reload")
+	}
+	if !reflect.DeepEqual(candidate.ListenAddr, current.ListenAddr) {
+		return fmt.Errorf("listen_addr cannot reload")
+	}
+	if !reflect.DeepEqual(candidate.LoggerGroup.Main.Level, current.LoggerGroup.Main.Level) {
+		return fmt.Errorf("logger_group.main.level cannot reload")
+	}
+	if !reflect.DeepEqual(candidate.LoggerGroup.Main.Format, current.LoggerGroup.Main.Format) {
+		return fmt.Errorf("logger_group.main.format cannot reload")
+	}
+	if !reflect.DeepEqual(candidate.LoggerGroup.Main.StderrAlso, current.LoggerGroup.Main.StderrAlso) {
+		return fmt.Errorf("logger_group.main.stderr_also cannot reload")
+	}
+	if !reflect.DeepEqual(candidate.LoggerGroup.Main.Dir, current.LoggerGroup.Main.Dir) {
+		return fmt.Errorf("logger_group.main.dir cannot reload")
+	}
+	if !reflect.DeepEqual(candidate.LoggerGroup.Main.Basename, current.LoggerGroup.Main.Basename) {
+		return fmt.Errorf("logger_group.main.basename cannot reload")
+	}
+	if !reflect.DeepEqual(candidate.LoggerGroup.Main.MaxSizeMb, current.LoggerGroup.Main.MaxSizeMb) {
+		return fmt.Errorf("logger_group.main.max_size_mb cannot reload")
+	}
+	if !reflect.DeepEqual(candidate.LoggerGroup.Main.MaxBackups, current.LoggerGroup.Main.MaxBackups) {
+		return fmt.Errorf("logger_group.main.max_backups cannot reload")
+	}
+	if !reflect.DeepEqual(candidate.LoggerGroup.Main.RotateByHour, current.LoggerGroup.Main.RotateByHour) {
+		return fmt.Errorf("logger_group.main.rotate_by_hour cannot reload")
+	}
+	if !reflect.DeepEqual(candidate.LoggerGroup.Res.Level, current.LoggerGroup.Res.Level) {
+		return fmt.Errorf("logger_group.res.level cannot reload")
+	}
+	if !reflect.DeepEqual(candidate.LoggerGroup.Res.Format, current.LoggerGroup.Res.Format) {
+		return fmt.Errorf("logger_group.res.format cannot reload")
+	}
+	if !reflect.DeepEqual(candidate.LoggerGroup.Res.StderrAlso, current.LoggerGroup.Res.StderrAlso) {
+		return fmt.Errorf("logger_group.res.stderr_also cannot reload")
+	}
+	if !reflect.DeepEqual(candidate.LoggerGroup.Res.Dir, current.LoggerGroup.Res.Dir) {
+		return fmt.Errorf("logger_group.res.dir cannot reload")
+	}
+	if !reflect.DeepEqual(candidate.LoggerGroup.Res.Basename, current.LoggerGroup.Res.Basename) {
+		return fmt.Errorf("logger_group.res.basename cannot reload")
+	}
+	if !reflect.DeepEqual(candidate.LoggerGroup.Res.MaxSizeMb, current.LoggerGroup.Res.MaxSizeMb) {
+		return fmt.Errorf("logger_group.res.max_size_mb cannot reload")
+	}
+	if !reflect.DeepEqual(candidate.LoggerGroup.Res.MaxBackups, current.LoggerGroup.Res.MaxBackups) {
+		return fmt.Errorf("logger_group.res.max_backups cannot reload")
+	}
+	if !reflect.DeepEqual(candidate.LoggerGroup.Res.RotateByHour, current.LoggerGroup.Res.RotateByHour) {
+		return fmt.Errorf("logger_group.res.rotate_by_hour cannot reload")
+	}
+	if !reflect.DeepEqual(candidate.LoggerGroup.Tracing.Level, current.LoggerGroup.Tracing.Level) {
+		return fmt.Errorf("logger_group.tracing.level cannot reload")
+	}
+	if !reflect.DeepEqual(candidate.LoggerGroup.Tracing.Format, current.LoggerGroup.Tracing.Format) {
+		return fmt.Errorf("logger_group.tracing.format cannot reload")
+	}
+	if !reflect.DeepEqual(candidate.LoggerGroup.Tracing.StderrAlso, current.LoggerGroup.Tracing.StderrAlso) {
+		return fmt.Errorf("logger_group.tracing.stderr_also cannot reload")
+	}
+	if !reflect.DeepEqual(candidate.LoggerGroup.Tracing.Dir, current.LoggerGroup.Tracing.Dir) {
+		return fmt.Errorf("logger_group.tracing.dir cannot reload")
+	}
+	if !reflect.DeepEqual(candidate.LoggerGroup.Tracing.Basename, current.LoggerGroup.Tracing.Basename) {
+		return fmt.Errorf("logger_group.tracing.basename cannot reload")
+	}
+	if !reflect.DeepEqual(candidate.LoggerGroup.Tracing.MaxSizeMb, current.LoggerGroup.Tracing.MaxSizeMb) {
+		return fmt.Errorf("logger_group.tracing.max_size_mb cannot reload")
+	}
+	if !reflect.DeepEqual(candidate.LoggerGroup.Tracing.MaxBackups, current.LoggerGroup.Tracing.MaxBackups) {
+		return fmt.Errorf("logger_group.tracing.max_backups cannot reload")
+	}
+	if !reflect.DeepEqual(candidate.LoggerGroup.Tracing.RotateByHour, current.LoggerGroup.Tracing.RotateByHour) {
+		return fmt.Errorf("logger_group.tracing.rotate_by_hour cannot reload")
+	}
+	return nil
+}
+

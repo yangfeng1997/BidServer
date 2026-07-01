@@ -16,6 +16,7 @@
 ## 子目录
 
 - [`configgen/`](configgen/)
+- [`servergen/`](servergen/)
 
 ## 主要文件
 

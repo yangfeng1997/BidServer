@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package config;
+
+import "config/schema/options.proto";
+import "config/schema/types.proto";
+
+option go_package = "project/config/gen;configgen";
+
+message RouteragentConfig {
+  option (config.root) = true;
+  option (config.server) = "routeragent";
+
+  string sock_path = 1 [(config.required) = true, (config.env) = true];
+  string listen_addr = 2 [(config.required) = true, (config.env) = true];
+  int32 heartbeat_sec = 3 [(config.required) = true, (config.reload) = true];
+  LoggerGroupConfig logger_group = 4;
+
+}

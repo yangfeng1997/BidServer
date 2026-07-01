@@ -39,3 +39,15 @@ func LoadLobby(path string) (*LobbyConfig, error) {
 	}
 	return cfg, nil
 }
+
+func LoadRouteragent(path string) (*RouteragentConfig, error) {
+	cfg, err := config.LoadYAML[*RouteragentConfig](path)
+	if err != nil {
+		return nil, fmt.Errorf("load routeragent config: %w", err)
+	}
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("validate routeragent config: %w", err)
+	}
+	return cfg, nil
+}
+

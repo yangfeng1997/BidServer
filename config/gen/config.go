@@ -2,7 +2,7 @@
 package configgen
 
 type CommonConfig struct {
-	Etcd  EtcdConfig  `yaml:"etcd"`
+	Etcd EtcdConfig `yaml:"etcd"`
 	Redis RedisConfig `yaml:"redis"`
 }
 
@@ -11,39 +11,47 @@ type EtcdConfig struct {
 }
 
 type RedisConfig struct {
-	Host     string `yaml:"host"`
-	Port     int32  `yaml:"port"`
+	Host string `yaml:"host"`
+	Port int32 `yaml:"port"`
 	Password string `yaml:"password"`
 }
 
 type GateConfig struct {
-	ListenTcp    string            `yaml:"listen_tcp"`
-	ListenWs     string            `yaml:"listen_ws"`
-	MaxConn      int32             `yaml:"max_conn"`
-	HeartbeatSec int32             `yaml:"heartbeat_sec"`
-	LoggerGroup  LoggerGroupConfig `yaml:"logger_group"`
+	ListenTcp string `yaml:"listen_tcp"`
+	ListenWs string `yaml:"listen_ws"`
+	MaxConn int32 `yaml:"max_conn"`
+	HeartbeatSec int32 `yaml:"heartbeat_sec"`
+	LoggerGroup LoggerGroupConfig `yaml:"logger_group"`
 }
 
 type LobbyConfig struct {
-	ListenAddr   string            `yaml:"listen_addr"`
-	MaxPlayer    int32             `yaml:"max_player"`
-	HeartbeatSec int32             `yaml:"heartbeat_sec"`
-	LoggerGroup  LoggerGroupConfig `yaml:"logger_group"`
+	ListenAddr string `yaml:"listen_addr"`
+	MaxPlayer int32 `yaml:"max_player"`
+	HeartbeatSec int32 `yaml:"heartbeat_sec"`
+	LoggerGroup LoggerGroupConfig `yaml:"logger_group"`
+}
+
+type RouteragentConfig struct {
+	SockPath string `yaml:"sock_path"`
+	ListenAddr string `yaml:"listen_addr"`
+	HeartbeatSec int32 `yaml:"heartbeat_sec"`
+	LoggerGroup LoggerGroupConfig `yaml:"logger_group"`
 }
 
 type LogConfig struct {
-	Level        string `yaml:"level"`
-	Format       string `yaml:"format"`
-	StderrAlso   bool   `yaml:"stderr_also"`
-	Dir          string `yaml:"dir"`
-	Basename     string `yaml:"basename"`
-	MaxSizeMb    int32  `yaml:"max_size_mb"`
-	MaxBackups   int32  `yaml:"max_backups"`
-	RotateByHour bool   `yaml:"rotate_by_hour"`
+	Level string `yaml:"level"`
+	Format string `yaml:"format"`
+	StderrAlso bool `yaml:"stderr_also"`
+	Dir string `yaml:"dir"`
+	Basename string `yaml:"basename"`
+	MaxSizeMb int32 `yaml:"max_size_mb"`
+	MaxBackups int32 `yaml:"max_backups"`
+	RotateByHour bool `yaml:"rotate_by_hour"`
 }
 
 type LoggerGroupConfig struct {
-	Main    LogConfig `yaml:"main"`
-	Res     LogConfig `yaml:"res"`
+	Main LogConfig `yaml:"main"`
+	Res LogConfig `yaml:"res"`
 	Tracing LogConfig `yaml:"tracing"`
 }
+

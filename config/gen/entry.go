@@ -14,3 +14,8 @@ func NewGateConfigEntry(path string) (*config.ConfigEntry[GateConfig], error) {
 func NewLobbyConfigEntry(path string) (*config.ConfigEntry[LobbyConfig], error) {
 	return config.NewConfigEntry(path, LoadLobby, CheckLobbyReload)
 }
+
+func NewRouteragentConfigEntry(path string) (*config.ConfigEntry[RouteragentConfig], error) {
+	return config.NewConfigEntry(path, LoadRouteragent, CheckRouteragentReload)
+}
+

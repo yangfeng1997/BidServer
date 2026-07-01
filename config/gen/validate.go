@@ -83,6 +83,25 @@ func (cfg *LobbyConfig) Validate() error {
 	return nil
 }
 
+func (cfg *RouteragentConfig) Validate() error {
+	if cfg == nil {
+		return fmt.Errorf("config is nil")
+	}
+	if cfg.SockPath == "" {
+		return fmt.Errorf("sock_path is required")
+	}
+	if cfg.ListenAddr == "" {
+		return fmt.Errorf("listen_addr is required")
+	}
+	if cfg.HeartbeatSec == 0 {
+		return fmt.Errorf("heartbeat_sec is required")
+	}
+	if err := cfg.LoggerGroup.Validate(); err != nil {
+		return fmt.Errorf("logger_group: %w", err)
+	}
+	return nil
+}
+
 func (cfg *LogConfig) Validate() error {
 	if cfg == nil {
 		return fmt.Errorf("config is nil")
@@ -125,3 +144,4 @@ func (cfg *LoggerGroupConfig) Validate() error {
 	}
 	return nil
 }
+

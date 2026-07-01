@@ -1,6 +1,7 @@
 svr_list:
   - gatesvr
   - lobbysvr
+  - routeragent
 
 gate_listen_tcp: "0.0.0.0:7001"
 gate_listen_ws: "0.0.0.0:7002"

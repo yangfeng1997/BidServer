@@ -13,7 +13,7 @@ gen-config:
 	@echo "  GEN     config"
 	@$(GO) run ./tools/configgen
 
-config:
+config: gen-config
 	@echo "  CONFIG env=$(ENV)"
 	@$(PY) tools/config.py --env $(ENV) --out $(RUN_DIR)
 
