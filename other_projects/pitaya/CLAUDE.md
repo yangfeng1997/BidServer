@@ -1,10 +1,23 @@
 # CLAUDE.md
 
-本文件为 Claude Code 在 `other_projects/pitaya` 中工作时的索引与工程约定。它只保留**必须先读的入口**、**当前仓库事实**、**工作流**和**修改规则**；更细节的 API、配置、通信链路以 `docs/` 和源码为准。
+本文件为 Claude Code 在 `other_projects/pitaya` 中工作时的总索引。目标是让你最快从项目根定位到 builder、app、service、session、cluster 和 docs 热点。
 
-> **维护约定**：凡是新增、删除、移动目录或包，修改启动流程、Builder 依赖、组件 / 模块生命周期、RPC / service discovery、session、acceptor、协议、配置项、构建命令或生成链路，都要同步更新本文件以及对应文档，避免文档和代码脱节。
+> **维护约定**：凡是新增、删除、移动目录或包，修改启动流程、Builder 依赖、组件 / 模块生命周期、RPC / service discovery、session、acceptor、协议、配置项、构建命令或生成链路，都要同步更新本文件以及对应文档。
 
----
+## 最快路径
+
+| 需求 | 直接看 |
+|---|---|
+| 应用装配 | `builder.go`、`app.go` |
+| 组件 / 模块 | `component.go`、`module.go` |
+| 业务 handler / remote | `service/handler.go`、`service/remote.go`、`service/handler_pool.go` |
+| Session | `session/` |
+| 集群 RPC | `cluster/` |
+| 路由 / pipeline | `route/`、`router/`、`pipeline/` |
+| 网络接入 | `acceptor/`、`agent/`、`conn/` |
+| 配置 | `config/`、`docs/configuration.rst` |
+| 协议 / 文档 | `docs/API.md`、`docs/communication.md`、`docs/builder.md` |
+| 发现 / group / worker | `groups/`、`worker/`、`metrics/`、`tracing/` |
 
 ## 文档索引
 
@@ -21,15 +34,11 @@
 | [`docs/cli.md`](docs/cli.md) | pitaya-cli REPL 客户端 | 调试客户端交互或文档路由前 |
 | [`docs/tracing.md`](docs/tracing.md) | tracing 说明 | 改 tracing 上下文传播前 |
 
----
-
 ## 输出语言
 
 - 对话回复、生成文档、代码注释、日志消息、错误消息默认使用简体中文。
 - 修改既有英文文档或英文注释时，保持原文件语言风格。
 - 标识符命名遵循 Go 习惯，不为了中文语义破坏可读性。
-
----
 
 ## 项目概述
 
@@ -45,7 +54,13 @@ Pitaya 是一个 Go 分布式游戏服务器框架，支持客户端连接、ses
 - 集群 RPC：NATS 与 gRPC 相关实现并存
 - 客户端协议：Pomelo packet / message 编解码，TCP 与 WebSocket acceptor
 
----
+## 快速读法
+
+- 先看“最快路径”表，再打开对应目录的 `CLAUDE.md`。
+- 改应用装配先看 `builder.go`、`app.go`。
+- 改网络 / 连接先看 `acceptor/`、`agent/`、`conn/`、`service/handler.go`。
+- 改集群 / 发现先看 `cluster/`、`groups/`、`worker/`。
+- 改配置先看 `config/`、`docs/configuration.rst`。
 
 ## 代码组织速览
 
@@ -76,50 +91,30 @@ Pitaya 是一个 Go 分布式游戏服务器框架，支持客户端连接、ses
 | `xk6-pitaya/` | k6 扩展 |
 | `docs/` | 用户文档 |
 
----
-
 ## 常用命令
 
 ```bash
-# 初始化依赖 / 子模块
 make setup
 make init-submodules
-
-# 单元测试覆盖率（排除 examples/e2e/benchmark 等）
 make unit-test-coverage
-
-# 完整测试，会启动测试依赖并跑 e2e
 make test
-
-# e2e 测试
 make e2e-test
 make e2e-test-nats
 make e2e-test-grpc
-
-# 构建工具
 make build-cli
 make build-k6-extension
-
-# protobuf 生成
 make protos-compile
 make protos-compile-demo
-
-# mocks 生成
 make mocks
 ```
-
-### 常用直接命令
 
 ```bash
 go test ./...
 go test ./cluster -run TestName -count=1
 go test ./service ./session ./agent -count=1
-go test $(go list ./... | grep -v examples | grep -v e2e | grep -v benchmark)
 ```
 
 注意：`make test` 会依赖 Docker Compose 启动 `examples/testing` 下的 etcd / NATS，并会跑 e2e；只改局部包时优先跑对应包测试。
-
----
 
 ## 核心启动链路
 
@@ -135,8 +130,6 @@ go test $(go list ./... | grep -v examples | grep -v e2e | grep -v benchmark)
 8. `Start()` 启动 acceptor、handler dispatch goroutine、cluster modules、components、metrics 和信号监听
 
 `Standalone` 模式不能有 RPC / service discovery 实例。`Cluster` 模式必须具备 `ServiceDiscovery`、`RPCClient`、`RPCServer`。
-
----
 
 ## 生命周期约定
 
@@ -173,14 +166,12 @@ Shutdown() error
 - 关闭顺序包括 `sessionPool.CloseAll()`、`shutdownModules()`、`shutdownComponents()`
 - `Shutdown()` 通过关闭 `dieChan` 触发停服，已做重复 close 保护
 
----
-
 ## 通信链路摘要
 
 客户端请求在 cluster 模式下的大致路径：
 
 1. 客户端连接 acceptor
-2. `HandlerService.Handle` 创建 agent 并启动 agent goroutine
+2. `HandlerService.Handle(conn)` 创建 agent 并启动 agent goroutine
 3. 首包必须是 handshake，服务端返回 serializer、dictionary、heartbeat
 4. 客户端发送 handshake ack 后连接进入工作状态
 5. Data 消息经 decoder 得到 packet / message
@@ -191,8 +182,6 @@ Shutdown() error
 10. frontend agent 按原 MID 回包给客户端
 
 重要边界：后端修改 session 不会自动同步到 frontend session，必须显式 push / commit 到 frontend。
-
----
 
 ## 配置与生成链路
 
@@ -212,11 +201,7 @@ Pitaya 使用 Viper：
 - `make protos-compile` 会生成 `protos/` 相关代码
 - `make mocks` 通过 `mockgen` 生成 mocks
 
----
-
 ## 工程纪律
-
-### 实现
 
 - 所有外部输入都要校验：客户端 handshake、消息 payload、RPC 参数、配置、metadata、session data。
 - 检查对象存在性、归属、生命周期、可操作状态与状态转移合法性。
@@ -225,37 +210,10 @@ Pitaya 使用 Viper：
 - 更改网络、RPC、session、worker、timer、metrics 时要考虑 goroutine 泄漏、channel 阻塞、重复 close、竞态和测试清理。
 - 修改 public API 时，同步 `docs/API.md` 和相关示例。
 
-### 清理
-
-- 清掉自己改动产生的孤儿：未用 import、变量、函数、临时测试代码和生成残留。
-- 既有死代码不主动删除；发现明显陈旧代码，先在结果里指出。
-
-### 测试
-
-- 测试从设计意图和文档约定推导，不要为了迁就实现去改测试。
-- 当文档与实现冲突导致测试失败时，先报告冲突点、源码位置和文档依据。
-- 外部依赖不便本地运行时，优先跑局部包测试和 `go test` 的纯单测；完整 e2e 需要 Docker Compose 的 etcd / NATS。
-
----
-
-## 上下文加载规则
-
-- 改启动 / 装配时，先读 `builder.go`、`app.go`、`docs/builder.md`。
-- 改 handler / remote API 时，先读 `docs/API.md`、`component/`、`service/handler.go`、`service/remote.go`。
-- 改通信链路时，先读 `docs/communication.md`、`acceptor/`、`agent/`、`conn/`、`service/`。
-- 改集群时，先读 `cluster/`、`router/`、`route/`、`context/`。
-- 改 session / handshake 时，先读 `session/`、`agent/`、`docs/handshake-validators.md`。
-- 改配置时，先读 `config/`、`docs/configuration.rst`。
-- 改 metrics / tracing / worker 时，先读对应目录与测试。
-
----
-
 ## 规则优先级
-
-规则冲突时：
 
 1. 任务明确要求优先。
 2. 更具体的文档优先于更宽泛的文档。
 3. 本文件管工程纪律、工作流和上下文加载。
-4. API / 配置 / 通信事实以 `docs/` 与源码为准。
+4. 设计与协议事实以源码为准。
 5. 不明确时先问，不要默默猜。
