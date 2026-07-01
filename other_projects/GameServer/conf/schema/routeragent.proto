@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package conf.schema;
+
+import "conf/schema/types.proto";
+import "conf/schema/options.proto";
+
+option go_package = "project/conf/schema/gen;gen";
+
+message RouteragentConfig {
+  RouterAgentConfig router_agent = 1;
+  LogGroupConfig log = 2;
+}
+
+message RouterAgentConfig {
+  string log_level    = 1 [(conf.schema.reload) = true, (conf.schema.enum_values) = "debug,info,warn,error"];
+  int32  heartbeat_sec = 2 [(conf.schema.reload) = true];
+}

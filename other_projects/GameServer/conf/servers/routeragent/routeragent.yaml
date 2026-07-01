@@ -1,0 +1,3 @@
+router_agent:
+  log_level: info
+  heartbeat_sec: 30

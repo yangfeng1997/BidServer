@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package protocol.handler;
+
+import "google/protobuf/empty.proto";
+import "protocol/common/options.proto";
+
+option go_package = "project/protocol/handler;handlerpb";
+
+message CS_ClaimReward_Req {
+  option (protocol.common.cmd_id) = 2050;
+}
+
+message SC_ClaimReward_Rsp {
+  option (protocol.common.cmd_id) = 2051;
+}
+
+service LobbyHandler {
+  option (protocol.common.kind) = FRONTEND;
+  option (protocol.common.server_type) = ST_LOBBYSVR;
+
+  rpc ClaimReward(CS_ClaimReward_Req) returns (SC_ClaimReward_Rsp);
+  rpc SyncPos(CS_SyncPos_Ntf) returns (google.protobuf.Empty);
+}
+
+message CS_SyncPos_Ntf {
+  option (protocol.common.cmd_id) = 2052;
+  option (protocol.common.no_auth) = true;
+}

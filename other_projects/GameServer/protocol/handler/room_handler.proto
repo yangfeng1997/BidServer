@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package protocol.handler;
+
+import "google/protobuf/empty.proto";
+import "protocol/common/options.proto";
+
+option go_package = "project/protocol/handler;handlerpb";
+
+service RoomHandler {
+  option (protocol.common.kind) = FRONTEND;
+  option (protocol.common.server_type) = ST_ROOMSVR;
+
+  rpc JoinRoom(CS_JoinRoom_Req) returns (SC_JoinRoom_Rsp);
+  rpc LeaveRoom(CS_LeaveRoom_Ntf) returns (google.protobuf.Empty);
+}
+
+message CS_JoinRoom_Req {
+  option (protocol.common.cmd_id) = 2100;
+}
+message SC_JoinRoom_Rsp {
+  option (protocol.common.cmd_id) = 2101;
+}
+message CS_LeaveRoom_Ntf {
+  option (protocol.common.cmd_id) = 2102;
+  option (protocol.common.no_auth) = true;
+}

@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package protocol.common;
+
+option go_package = "project/protocol/common;common";
+
+enum ErrCode {
+  OK = 0;
+  ERR_INTERNAL = 1;
+  ERR_TIMEOUT = 2;
+  ERR_NO_ROUTE = 3;
+  ERR_UNAUTHED = 4;
+  ERR_UNMARSHAL = 5;
+}

@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package protocol.common;
+
+import "google/protobuf/descriptor.proto";
+import "protocol/common/node.proto";
+
+option go_package = "project/protocol/common;common";
+
+enum ServiceKind {
+  FRONTEND = 0;
+  BACKEND = 1;
+}
+
+extend google.protobuf.ServiceOptions {
+  ServiceKind kind = 50001;
+  ServerType server_type = 50002;
+}
+
+extend google.protobuf.MessageOptions {
+  uint32 cmd_id = 50003;
+  bool no_auth = 50004;
+}

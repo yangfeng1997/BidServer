@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package conf.schema;
+
+import "conf/schema/options.proto";
+
+option go_package = "project/conf/schema/gen;gen";
+
+// CommonConfig 所有服务共用的基础设施配置，独立加载
+message CommonConfig {
+  NodeConfig  node  = 1;
+  EtcdConfig  etcd  = 2;
+  RedisConfig redis = 3;
+}
+
+message NodeConfig {
+  uint32 world_id     = 1 [(conf.schema.required) = true];
+  uint32 server_type  = 2 [(conf.schema.required) = true];
+  uint32 server_index = 3;
+}
+
+message EtcdConfig {
+  repeated string endpoints = 1 [(conf.schema.required) = true];
+}
+
+message RedisConfig {
+  string host     = 1 [(conf.schema.required) = true];
+  int32  port     = 2 [(conf.schema.required) = true];
+  string password = 3 [(conf.schema.required) = true, (conf.schema.env) = true];
+}

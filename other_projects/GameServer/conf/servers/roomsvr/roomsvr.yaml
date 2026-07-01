@@ -1,0 +1,3 @@
+room:
+  log_level: info
+  max_room: 2000

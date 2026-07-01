@@ -1,0 +1,7 @@
+gate:
+  listen_tcp: "${gate_listen_tcp}"
+  listen_ws:  "${gate_listen_ws}"
+  drain_timeout_sec: 5
+  max_conn: 10000
+  log_level: info
+  heartbeat_sec: 30

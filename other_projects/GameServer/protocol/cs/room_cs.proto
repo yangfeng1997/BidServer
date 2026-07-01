@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package protocol.cs;
+
+import "protocol/common/options.proto";
+
+option go_package = "project/protocol/cs;cs";
+
+// -- 聊天 --
+message CS_Chat_Req {
+  option (protocol.common.cmd_id) = 3001;
+  uint32 channel = 1;  // 1=世界 2=房间 3=私聊
+  uint64 target_uid = 2;
+  string content = 3;
+}
+
+message SC_Chat_Rsp {
+  option (protocol.common.cmd_id) = 3002;
+}
+
+message SC_Chat_Ntf {
+  option (protocol.common.cmd_id) = 3003;
+  uint64 from_uid = 1;
+  string from_name = 2;
+  uint32 channel = 3;
+  string content = 4;
+}
+
+// -- 系统通知 --
+message SC_SystemNotice_Ntf {
+  option (protocol.common.cmd_id) = 3004;
+  uint32 notice_type = 1;
+  string content = 2;
+}
+
+// -- 背包 --
+message CS_UseItem_Req {
+  option (protocol.common.cmd_id) = 3005;
+  uint64 item_id = 1;
+  uint32 count = 2;
+}
+
+message SC_UseItem_Rsp {
+  option (protocol.common.cmd_id) = 3006;
+  uint64 item_id = 1;
+  uint32 remaining = 2;
+}

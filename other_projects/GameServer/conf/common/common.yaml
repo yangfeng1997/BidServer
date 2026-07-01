@@ -1,0 +1,13 @@
+node:
+  world_id: 1
+  server_type: 1    # 由各服务 yaml 各自的 server_type 覆盖
+  server_index: 0   # --server-index 覆盖
+
+etcd:
+  endpoints:
+    - "${etcd_endpoint}"
+
+redis:
+  host: "${redis_host}"
+  port: ${redis_port}
+  password: "${REDIS_PWD}"

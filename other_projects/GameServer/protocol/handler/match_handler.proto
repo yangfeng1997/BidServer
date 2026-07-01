@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package protocol.handler;
+
+import "google/protobuf/empty.proto";
+import "protocol/common/options.proto";
+
+option go_package = "project/protocol/handler;handlerpb";
+
+service MatchHandler {
+  option (protocol.common.kind) = FRONTEND;
+  option (protocol.common.server_type) = ST_MATCHSVR;
+
+  rpc StartMatch(CS_StartMatch_Req) returns (SC_StartMatch_Rsp);
+  rpc CancelMatch(CS_CancelMatch_Ntf) returns (google.protobuf.Empty);
+}
+
+message CS_StartMatch_Req {
+  option (protocol.common.cmd_id) = 2200;
+}
+message SC_StartMatch_Rsp {
+  option (protocol.common.cmd_id) = 2201;
+}
+message CS_CancelMatch_Ntf {
+  option (protocol.common.cmd_id) = 2202;
+}

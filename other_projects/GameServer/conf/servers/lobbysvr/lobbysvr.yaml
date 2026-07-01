@@ -1,0 +1,4 @@
+lobby:
+  log_level: info
+  heartbeat_sec: 30
+  max_player: 5000

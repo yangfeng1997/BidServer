@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package conf.schema;
+
+import "conf/schema/types.proto";
+import "conf/schema/options.proto";
+
+option go_package = "project/conf/schema/gen;gen";
+
+message GatesvrConfig {
+  GateConfig gate = 1;
+  LogGroupConfig log = 2;
+}
+
+message GateConfig {
+  string listen_tcp        = 1 [(conf.schema.required) = true];
+  string listen_ws         = 2 [(conf.schema.required) = true];
+  int32  drain_timeout_sec = 3;
+  int32  max_conn          = 4 [(conf.schema.required) = true, (conf.schema.reload) = true];
+  string log_level         = 5 [(conf.schema.reload) = true, (conf.schema.enum_values) = "debug,info,warn,error"];
+  int32  heartbeat_sec     = 6 [(conf.schema.reload) = true];
+}

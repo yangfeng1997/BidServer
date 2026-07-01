@@ -1,0 +1,3 @@
+match:
+  log_level: info
+  match_tick_ms: 100

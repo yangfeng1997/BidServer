@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package protocol.ra;
+
+option go_package = "project/protocol/ra;ra";
+
+message Handshake {
+  uint32 node_id = 1;
+}
+
+message HandshakeAck {
+  bool ok = 1;
+  string message = 2;
+}

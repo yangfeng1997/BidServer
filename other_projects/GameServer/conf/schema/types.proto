@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package conf.schema;
+
+import "conf/schema/options.proto";
+
+option go_package = "project/conf/schema/gen;gen";
+
+message LogConfig {
+  string level         = 1 [(conf.schema.enum_values) = "debug,info,warn,error,fatal"];
+  string format        = 2 [(conf.schema.enum_values) = "console,json"];
+  bool   stderr_also   = 3;
+  string dir           = 4 [(conf.schema.required) = true];
+  string basename      = 5 [(conf.schema.required) = true];
+  int32  max_size_mb   = 6;
+  int32  max_backups   = 7;
+  bool   rotate_by_hour = 8;
+}
+
+message LogGroupConfig {
+  LogConfig main    = 1;
+  LogConfig res     = 2;
+  LogConfig tracing = 3;
+}

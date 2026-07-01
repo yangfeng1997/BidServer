@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package protocol.service;
+
+import "google/protobuf/empty.proto";
+import "protocol/common/options.proto";
+
+option go_package = "project/protocol/service;servicepb";
+
+message RPC_StartMatch_Req {}
+message RPC_StartMatch_Rsp {}
+message RPC_CancelMatch_Ntf {}
+
+service MatchService {
+  option (protocol.common.kind) = BACKEND;
+  option (protocol.common.server_type) = ST_MATCHSVR;
+
+  rpc StartMatch(RPC_StartMatch_Req) returns (RPC_StartMatch_Rsp);
+  rpc CancelMatch(RPC_CancelMatch_Ntf) returns (google.protobuf.Empty);
+}

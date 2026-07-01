@@ -1,0 +1,14 @@
+svr_list:
+  - gatesvr
+  - lobbysvr
+  - roomsvr
+  - matchsvr
+  - onlinesvr
+  - routeragent
+
+redis_host: "127.0.0.1"
+redis_port: 6379
+etcd_endpoint: "127.0.0.1:2379"
+gate_listen_tcp: "0.0.0.0:7001"
+gate_listen_ws: "0.0.0.0:7002"
+log_dir: "./logs"
