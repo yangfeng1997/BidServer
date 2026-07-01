@@ -11,8 +11,8 @@ type CommonConfigEntry = config.ConfigEntry[configgen.CommonConfig]
 type RouteragentConfigEntry = config.ConfigEntry[configgen.RouteragentConfig]
 
 type ConfigChange struct {
-	OldCommon *configgen.CommonConfig
-	NewCommon *configgen.CommonConfig
+	OldCommon      *configgen.CommonConfig
+	NewCommon      *configgen.CommonConfig
 	OldRouteragent *configgen.RouteragentConfig
 	NewRouteragent *configgen.RouteragentConfig
 }
@@ -20,9 +20,9 @@ type ConfigChange struct {
 type ConfigChangeHook func(ConfigChange) error
 
 var (
-	commonConfigEntry *CommonConfigEntry
+	commonConfigEntry      *CommonConfigEntry
 	routeragentConfigEntry *RouteragentConfigEntry
-	configChangeHooks []ConfigChangeHook
+	configChangeHooks      []ConfigChangeHook
 )
 
 func SetCommonConfigEntry(entry *CommonConfigEntry) {
@@ -70,8 +70,8 @@ func ReloadConfig() error {
 	}
 
 	change := ConfigChange{
-		OldCommon: oldCommon,
-		NewCommon: CommonConfig(),
+		OldCommon:      oldCommon,
+		NewCommon:      CommonConfig(),
 		OldRouteragent: oldRouteragent,
 		NewRouteragent: RouteragentConfig(),
 	}

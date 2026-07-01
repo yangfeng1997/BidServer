@@ -1,5 +1,7 @@
 package app
 
+import "context"
+
 // Module 是 App 管理的生命周期单元。
 type Module interface {
 	Name() string
@@ -28,3 +30,13 @@ func (b *BaseModule) Init() error      { return nil }
 func (b *BaseModule) AfterInit() error { return nil }
 func (b *BaseModule) BeforeShutdown()  {}
 func (b *BaseModule) Shutdown()        {}
+
+// Poster 表示可从其他 goroutine 投递任务到主循环的对象。
+type Poster interface {
+	Post(fn func())
+}
+
+// ReadyWaiter 表示需要等待异步初始化完成的模块。
+type ReadyWaiter interface {
+	WaitReady(ctx context.Context) error
+}

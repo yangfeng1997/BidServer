@@ -15,9 +15,11 @@
 
 - [`gate/`](gate/)
 - [`lobby/`](lobby/)
+- [`routeragent/`](routeragent/)
 
 ## 快速读法
 
 - 网关相关先看 `gate/`。
 - 大厅相关先看 `lobby/`。
+- 路由代理相关先看 `routeragent/`。
 - 改服务启动时，要同步 `cmd/<svc>/`。

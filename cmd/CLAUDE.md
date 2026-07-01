@@ -17,16 +17,19 @@
 
 - [`gatesvr/`](gatesvr/)
 - [`lobbysvr/`](lobbysvr/)
+- [`routeragent/`](routeragent/)
 
 ## 主要文件
 
 - [`gatesvr/main.go`](gatesvr/main.go)
 - [`lobbysvr/main.go`](lobbysvr/main.go)
+- [`routeragent/main.go`](routeragent/main.go)
 
 ## 快速读法
 
 - 查网关启动先看 `cmd/gatesvr/main.go`，再看 `internal/server/gate/`。
 - 查大厅启动先看 `cmd/lobbysvr/main.go`，再看 `internal/server/lobby/`。
+- 查路由代理启动先看 `cmd/routeragent/main.go`，再看 `internal/server/routeragent/`。
 
 ## 工作规则
 

@@ -26,6 +26,7 @@ func NewRouteragentBuilder(opts Options) *Builder {
 	baseBuilder := app.NewBaseBuilder(nil)
 	baseBuilder.SetDaemon(opts.Daemon)
 	baseBuilder.SetPprof(opts.Pprof, opts.PprofAddr)
+	baseBuilder.AddModule(NewModule())
 	baseBuilder.AddShutdownHook(loggerGroup.Shutdown)
 	baseBuilder.AddReloadHook(ReloadConfig)
 

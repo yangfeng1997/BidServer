@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -8,14 +9,17 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+	"time"
 
 	"project/internal/core/logger"
 	"project/internal/core/process"
+	"project/pkg/taskqueue"
 )
 
 type App interface {
 	Startup() error
 	Shutdown()
+	Post(fn func())
 	Reload() error
 	DieChan() chan bool
 	DieNotifyChan() <-chan bool
@@ -41,6 +45,7 @@ type BaseApp struct {
 	modulesArray  []moduleWrapper
 	shutdownHooks []func()
 	reloadHooks   []func() error
+	postQueue     *taskqueue.Queue
 }
 
 func NewBaseApp(dieChan chan bool, daemon bool, pprof bool, pprofAddr string, shutdownHooks []func(), reloadHooks []func() error) *BaseApp {
@@ -58,6 +63,7 @@ func NewBaseApp(dieChan chan bool, daemon bool, pprof bool, pprofAddr string, sh
 		modulesMap:    make(map[string]Module),
 		shutdownHooks: append([]func(){}, shutdownHooks...),
 		reloadHooks:   append([]func() error{}, reloadHooks...),
+		postQueue:     taskqueue.New(0),
 	}
 }
 
@@ -93,6 +99,10 @@ func (app *BaseApp) Startup() error {
 		}
 	}
 	logger.Main.Info("app moudles AfterInit ok!")
+
+	if err := app.waitReady(); err != nil {
+		return err
+	}
 
 	app.running = true
 	// 进入时间循环
@@ -149,6 +159,8 @@ func (app *BaseApp) runLoop() {
 wait:
 	for {
 		select {
+		case fn := <-app.postQueue.C():
+			fn()
 		case <-app.dieChan:
 			logger.Main.Warn("app dieChan shutdown")
 			// 内部主动停服，进入普通停服流程
@@ -163,7 +175,9 @@ wait:
 				// 收到优雅停服信号，先停止接入，再等待存量逻辑结束
 				break wait
 			case process.IsReloadSignal(sig):
-				// 收到热更信号，执行热更流程；当前先不处理热更逻辑
+				if err := app.Reload(); err != nil {
+					logger.Main.Error("app reload failed", logger.Err(err))
+				}
 				continue
 			default:
 				// 未识别信号，当前按普通停服流程处理
@@ -179,6 +193,26 @@ func (app *BaseApp) Shutdown() {
 	default:
 		close(app.dieChan)
 	}
+}
+
+func (app *BaseApp) Post(fn func()) {
+	app.postQueue.Post(fn)
+}
+
+func (app *BaseApp) waitReady() error {
+	for _, wrapper := range app.modulesArray {
+		waiter, ok := wrapper.module.(ReadyWaiter)
+		if !ok {
+			continue
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		err := waiter.WaitReady(ctx)
+		cancel()
+		if err != nil {
+			return fmt.Errorf("wait ready module %s: %w", wrapper.name, err)
+		}
+	}
+	return nil
 }
 
 func (app *BaseApp) shutdownAllHooks() {

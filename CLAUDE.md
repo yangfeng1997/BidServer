@@ -32,7 +32,7 @@
 
 - 模块路径：`project`
 - Go 版本：`1.26`
-- 主服务：`gatesvr`、`lobbysvr`
+- 主服务：`gatesvr`、`lobbysvr`、`routeragent`
 - 主要配置目录：`config/`
 - 核心代码：`internal/core/`
 - 服务实现：`internal/server/`
@@ -42,6 +42,7 @@
 - 查服务启动：先看 `cmd/<svc>/`，再看 `internal/server/<svc>/`。
 - 查配置：先看 `config/CLAUDE.md`，再看 `config/schema/` 与 `config/gen/`。
 - 查框架核心：先看 `internal/CLAUDE.md`，再看 `internal/core/`。
+- 查节点 ID：先看 `internal/core/nodeid/`。
 - 查日志：先看 `pkg/logger/` 与 `internal/core/logger/`。
 - 查工具：先看 `tools/CLAUDE.md`，再看 `tools/configgen/` 与 `tools/config.py`、`tools/build.py`。
 
