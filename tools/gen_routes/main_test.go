@@ -105,9 +105,6 @@ func TestServerTypeToConstGenRoutes(t *testing.T) {
 	tests := map[string]string{
 		"ST_GATESVR":     "serverTypeGate",
 		"ST_LOBBYSVR":    "serverTypeLobby",
-		"ST_ROOMSVR":     "serverTypeRoom",
-		"ST_MATCHSVR":    "serverTypeMatch",
-		"ST_ONLINESVR":   "serverTypeOnline",
 		"ST_ROUTERAGENT": "serverTypeRouterAgent",
 	}
 	for input, expected := range tests {

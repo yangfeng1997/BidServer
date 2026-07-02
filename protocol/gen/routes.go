@@ -3,8 +3,8 @@ package rpc
 // RouteEntry 描述一条已生成的路由
 type RouteEntry struct {
 	ServerType uint32
-	Route      string
-	RspCmdID   uint32
+	Route string
+	RspCmdID uint32
 }
 
 // RouteTable 是客户端入口路由表

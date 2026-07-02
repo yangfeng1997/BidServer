@@ -176,12 +176,6 @@ func serverTypeToConst(name string) string {
 		return "serverTypeGate"
 	case "ST_LOBBYSVR":
 		return "serverTypeLobby"
-	case "ST_ROOMSVR":
-		return "serverTypeRoom"
-	case "ST_MATCHSVR":
-		return "serverTypeMatch"
-	case "ST_ONLINESVR":
-		return "serverTypeOnline"
 	case "ST_ROUTERAGENT":
 		return "serverTypeRouterAgent"
 	default:

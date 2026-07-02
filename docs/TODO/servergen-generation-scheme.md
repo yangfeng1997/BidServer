@@ -120,7 +120,7 @@ go run ./tools/servergen --name routeragent --kind sidecar --register-env dev,pr
 职责：
 
 - 作为烘焙模板输入
-- 进入 `config.py` / `config_bake.py` 现有流程
+- 进入 `scripts/config.py` / `scripts/config_bake.py` 现有流程
 
 ---
 
@@ -201,8 +201,8 @@ tools/servergen/
 
 `servergen` 生成后的结果要能直接接上当前仓库约定：
 
-- `tools/config.py` 依据 `svr_list` 发现服务
-- `tools/build.py` 依据 `cmd/<svc>` 编译服务
+- `scripts/config.py` 依据 `svr_list` 发现服务
+- `scripts/build.py` 依据 `cmd/<svc>` 编译服务
 - `config/schema/*.proto` 作为配置事实源
 - `config/<svc>.yaml` 作为烘焙输入
 - `config/values/*.yaml` 决定环境里有哪些服务

@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package protocol.remote;
+
+import "google/protobuf/empty.proto";
+import "protocol/common/options.proto";
+
+option go_package = "project/protocol/remote;remotepb";
+
+message RPC_Login_Req {}
+message RPC_Login_Rsp {}
+message RPC_PlayerDisconnect_Ntf {}
+
+service LobbyRemote {
+  option (protocol.common.kind) = BACKEND;
+  option (protocol.common.server_type) = ST_LOBBYSVR;
+
+  rpc Login(RPC_Login_Req) returns (RPC_Login_Rsp);
+  rpc PlayerDisconnect(RPC_PlayerDisconnect_Ntf) returns (google.protobuf.Empty);
+}

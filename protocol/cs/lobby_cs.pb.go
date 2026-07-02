@@ -9,6 +9,7 @@ package cs
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	_ "project/protocol/common"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -21,26 +22,28 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type CS_Example_Req struct {
+// -- 通用消息 --
+type CS_Heartbeat_Ntf struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	ClientTime    uint64                 `protobuf:"varint,1,opt,name=client_time,json=clientTime,proto3" json:"client_time,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *CS_Example_Req) Reset() {
-	*x = CS_Example_Req{}
+func (x *CS_Heartbeat_Ntf) Reset() {
+	*x = CS_Heartbeat_Ntf{}
 	mi := &file_protocol_cs_lobby_cs_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *CS_Example_Req) String() string {
+func (x *CS_Heartbeat_Ntf) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CS_Example_Req) ProtoMessage() {}
+func (*CS_Heartbeat_Ntf) ProtoMessage() {}
 
-func (x *CS_Example_Req) ProtoReflect() protoreflect.Message {
+func (x *CS_Heartbeat_Ntf) ProtoReflect() protoreflect.Message {
 	mi := &file_protocol_cs_lobby_cs_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -52,17 +55,444 @@ func (x *CS_Example_Req) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CS_Example_Req.ProtoReflect.Descriptor instead.
-func (*CS_Example_Req) Descriptor() ([]byte, []int) {
+// Deprecated: Use CS_Heartbeat_Ntf.ProtoReflect.Descriptor instead.
+func (*CS_Heartbeat_Ntf) Descriptor() ([]byte, []int) {
 	return file_protocol_cs_lobby_cs_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *CS_Heartbeat_Ntf) GetClientTime() uint64 {
+	if x != nil {
+		return x.ClientTime
+	}
+	return 0
+}
+
+type SC_Heartbeat_Ntf struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ServerTime    uint64                 `protobuf:"varint,1,opt,name=server_time,json=serverTime,proto3" json:"server_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SC_Heartbeat_Ntf) Reset() {
+	*x = SC_Heartbeat_Ntf{}
+	mi := &file_protocol_cs_lobby_cs_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SC_Heartbeat_Ntf) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SC_Heartbeat_Ntf) ProtoMessage() {}
+
+func (x *SC_Heartbeat_Ntf) ProtoReflect() protoreflect.Message {
+	mi := &file_protocol_cs_lobby_cs_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SC_Heartbeat_Ntf.ProtoReflect.Descriptor instead.
+func (*SC_Heartbeat_Ntf) Descriptor() ([]byte, []int) {
+	return file_protocol_cs_lobby_cs_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *SC_Heartbeat_Ntf) GetServerTime() uint64 {
+	if x != nil {
+		return x.ServerTime
+	}
+	return 0
+}
+
+// -- 登录/认证 --
+type CS_Login_Req struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	Platform      uint32                 `protobuf:"varint,2,opt,name=platform,proto3" json:"platform,omitempty"` // 1=iOS 2=Android 3=Web 4=PC
+	DeviceId      string                 `protobuf:"bytes,3,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
+	ClientVersion string                 `protobuf:"bytes,4,opt,name=client_version,json=clientVersion,proto3" json:"client_version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CS_Login_Req) Reset() {
+	*x = CS_Login_Req{}
+	mi := &file_protocol_cs_lobby_cs_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CS_Login_Req) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CS_Login_Req) ProtoMessage() {}
+
+func (x *CS_Login_Req) ProtoReflect() protoreflect.Message {
+	mi := &file_protocol_cs_lobby_cs_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CS_Login_Req.ProtoReflect.Descriptor instead.
+func (*CS_Login_Req) Descriptor() ([]byte, []int) {
+	return file_protocol_cs_lobby_cs_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *CS_Login_Req) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
+}
+
+func (x *CS_Login_Req) GetPlatform() uint32 {
+	if x != nil {
+		return x.Platform
+	}
+	return 0
+}
+
+func (x *CS_Login_Req) GetDeviceId() string {
+	if x != nil {
+		return x.DeviceId
+	}
+	return ""
+}
+
+func (x *CS_Login_Req) GetClientVersion() string {
+	if x != nil {
+		return x.ClientVersion
+	}
+	return ""
+}
+
+type SC_Login_Rsp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Uid           int64                  `protobuf:"varint,1,opt,name=uid,proto3" json:"uid,omitempty"`
+	Nickname      string                 `protobuf:"bytes,2,opt,name=nickname,proto3" json:"nickname,omitempty"`
+	LobbyNodeId   uint32                 `protobuf:"varint,3,opt,name=lobby_node_id,json=lobbyNodeId,proto3" json:"lobby_node_id,omitempty"` // 分配的 lobby 节点 ID
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SC_Login_Rsp) Reset() {
+	*x = SC_Login_Rsp{}
+	mi := &file_protocol_cs_lobby_cs_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SC_Login_Rsp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SC_Login_Rsp) ProtoMessage() {}
+
+func (x *SC_Login_Rsp) ProtoReflect() protoreflect.Message {
+	mi := &file_protocol_cs_lobby_cs_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SC_Login_Rsp.ProtoReflect.Descriptor instead.
+func (*SC_Login_Rsp) Descriptor() ([]byte, []int) {
+	return file_protocol_cs_lobby_cs_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *SC_Login_Rsp) GetUid() int64 {
+	if x != nil {
+		return x.Uid
+	}
+	return 0
+}
+
+func (x *SC_Login_Rsp) GetNickname() string {
+	if x != nil {
+		return x.Nickname
+	}
+	return ""
+}
+
+func (x *SC_Login_Rsp) GetLobbyNodeId() uint32 {
+	if x != nil {
+		return x.LobbyNodeId
+	}
+	return 0
+}
+
+// -- 重连 --
+type CS_Reconnect_Req struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	SessionId     uint64                 `protobuf:"varint,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CS_Reconnect_Req) Reset() {
+	*x = CS_Reconnect_Req{}
+	mi := &file_protocol_cs_lobby_cs_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CS_Reconnect_Req) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CS_Reconnect_Req) ProtoMessage() {}
+
+func (x *CS_Reconnect_Req) ProtoReflect() protoreflect.Message {
+	mi := &file_protocol_cs_lobby_cs_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CS_Reconnect_Req.ProtoReflect.Descriptor instead.
+func (*CS_Reconnect_Req) Descriptor() ([]byte, []int) {
+	return file_protocol_cs_lobby_cs_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *CS_Reconnect_Req) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
+}
+
+func (x *CS_Reconnect_Req) GetSessionId() uint64 {
+	if x != nil {
+		return x.SessionId
+	}
+	return 0
+}
+
+type SC_Reconnect_Rsp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ok            bool                   `protobuf:"varint,1,opt,name=ok,proto3" json:"ok,omitempty"`
+	NewSessionId  uint64                 `protobuf:"varint,2,opt,name=new_session_id,json=newSessionId,proto3" json:"new_session_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SC_Reconnect_Rsp) Reset() {
+	*x = SC_Reconnect_Rsp{}
+	mi := &file_protocol_cs_lobby_cs_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SC_Reconnect_Rsp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SC_Reconnect_Rsp) ProtoMessage() {}
+
+func (x *SC_Reconnect_Rsp) ProtoReflect() protoreflect.Message {
+	mi := &file_protocol_cs_lobby_cs_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SC_Reconnect_Rsp.ProtoReflect.Descriptor instead.
+func (*SC_Reconnect_Rsp) Descriptor() ([]byte, []int) {
+	return file_protocol_cs_lobby_cs_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *SC_Reconnect_Rsp) GetOk() bool {
+	if x != nil {
+		return x.Ok
+	}
+	return false
+}
+
+func (x *SC_Reconnect_Rsp) GetNewSessionId() uint64 {
+	if x != nil {
+		return x.NewSessionId
+	}
+	return 0
+}
+
+// -- Kick --
+type SC_Kick_Ntf struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Reason        uint32                 `protobuf:"varint,1,opt,name=reason,proto3" json:"reason,omitempty"` // 1=重复登录 2=封禁 3=服务器关闭
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SC_Kick_Ntf) Reset() {
+	*x = SC_Kick_Ntf{}
+	mi := &file_protocol_cs_lobby_cs_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SC_Kick_Ntf) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SC_Kick_Ntf) ProtoMessage() {}
+
+func (x *SC_Kick_Ntf) ProtoReflect() protoreflect.Message {
+	mi := &file_protocol_cs_lobby_cs_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SC_Kick_Ntf.ProtoReflect.Descriptor instead.
+func (*SC_Kick_Ntf) Descriptor() ([]byte, []int) {
+	return file_protocol_cs_lobby_cs_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *SC_Kick_Ntf) GetReason() uint32 {
+	if x != nil {
+		return x.Reason
+	}
+	return 0
+}
+
+func (x *SC_Kick_Ntf) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+// -- 通用错误响应 --
+type SC_Error_Rsp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CmdId         uint32                 `protobuf:"varint,1,opt,name=cmd_id,json=cmdId,proto3" json:"cmd_id,omitempty"` // 原始请求的 cmd_id
+	ErrCode       uint32                 `protobuf:"varint,2,opt,name=err_code,json=errCode,proto3" json:"err_code,omitempty"`
+	ErrMsg        string                 `protobuf:"bytes,3,opt,name=err_msg,json=errMsg,proto3" json:"err_msg,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SC_Error_Rsp) Reset() {
+	*x = SC_Error_Rsp{}
+	mi := &file_protocol_cs_lobby_cs_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SC_Error_Rsp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SC_Error_Rsp) ProtoMessage() {}
+
+func (x *SC_Error_Rsp) ProtoReflect() protoreflect.Message {
+	mi := &file_protocol_cs_lobby_cs_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SC_Error_Rsp.ProtoReflect.Descriptor instead.
+func (*SC_Error_Rsp) Descriptor() ([]byte, []int) {
+	return file_protocol_cs_lobby_cs_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *SC_Error_Rsp) GetCmdId() uint32 {
+	if x != nil {
+		return x.CmdId
+	}
+	return 0
+}
+
+func (x *SC_Error_Rsp) GetErrCode() uint32 {
+	if x != nil {
+		return x.ErrCode
+	}
+	return 0
+}
+
+func (x *SC_Error_Rsp) GetErrMsg() string {
+	if x != nil {
+		return x.ErrMsg
+	}
+	return ""
 }
 
 var File_protocol_cs_lobby_cs_proto protoreflect.FileDescriptor
 
 const file_protocol_cs_lobby_cs_proto_rawDesc = "" +
 	"\n" +
-	"\x1aprotocol/cs/lobby_cs.proto\x12\vprotocol.cs\"\x10\n" +
-	"\x0eCS_Example_ReqB\x18Z\x16project/protocol/cs;csb\x06proto3"
+	"\x1aprotocol/cs/lobby_cs.proto\x12\vprotocol.cs\x1a\x1dprotocol/common/options.proto\">\n" +
+	"\x10CS_Heartbeat_Ntf\x12\x1f\n" +
+	"\vclient_time\x18\x01 \x01(\x04R\n" +
+	"clientTime:\t\x98\xb5\x18\xe9\a\xa0\xb5\x18\x01\":\n" +
+	"\x10SC_Heartbeat_Ntf\x12\x1f\n" +
+	"\vserver_time\x18\x01 \x01(\x04R\n" +
+	"serverTime:\x05\x98\xb5\x18\xea\a\"\x8b\x01\n" +
+	"\fCS_Login_Req\x12\x14\n" +
+	"\x05token\x18\x01 \x01(\tR\x05token\x12\x1a\n" +
+	"\bplatform\x18\x02 \x01(\rR\bplatform\x12\x1b\n" +
+	"\tdevice_id\x18\x03 \x01(\tR\bdeviceId\x12%\n" +
+	"\x0eclient_version\x18\x04 \x01(\tR\rclientVersion:\x05\x98\xb5\x18\xd1\x0f\"g\n" +
+	"\fSC_Login_Rsp\x12\x10\n" +
+	"\x03uid\x18\x01 \x01(\x03R\x03uid\x12\x1a\n" +
+	"\bnickname\x18\x02 \x01(\tR\bnickname\x12\"\n" +
+	"\rlobby_node_id\x18\x03 \x01(\rR\vlobbyNodeId:\x05\x98\xb5\x18\xd2\x0f\"N\n" +
+	"\x10CS_Reconnect_Req\x12\x14\n" +
+	"\x05token\x18\x01 \x01(\tR\x05token\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x02 \x01(\x04R\tsessionId:\x05\x98\xb5\x18\xd3\x0f\"O\n" +
+	"\x10SC_Reconnect_Rsp\x12\x0e\n" +
+	"\x02ok\x18\x01 \x01(\bR\x02ok\x12$\n" +
+	"\x0enew_session_id\x18\x02 \x01(\x04R\fnewSessionId:\x05\x98\xb5\x18\xd4\x0f\"F\n" +
+	"\vSC_Kick_Ntf\x12\x16\n" +
+	"\x06reason\x18\x01 \x01(\rR\x06reason\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage:\x05\x98\xb5\x18\xd5\x0f\"`\n" +
+	"\fSC_Error_Rsp\x12\x15\n" +
+	"\x06cmd_id\x18\x01 \x01(\rR\x05cmdId\x12\x19\n" +
+	"\berr_code\x18\x02 \x01(\rR\aerrCode\x12\x17\n" +
+	"\aerr_msg\x18\x03 \x01(\tR\x06errMsg:\x05\x98\xb5\x18\xd6\x0fB\x18Z\x16project/protocol/cs;csb\x06proto3"
 
 var (
 	file_protocol_cs_lobby_cs_proto_rawDescOnce sync.Once
@@ -76,9 +506,16 @@ func file_protocol_cs_lobby_cs_proto_rawDescGZIP() []byte {
 	return file_protocol_cs_lobby_cs_proto_rawDescData
 }
 
-var file_protocol_cs_lobby_cs_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_protocol_cs_lobby_cs_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_protocol_cs_lobby_cs_proto_goTypes = []any{
-	(*CS_Example_Req)(nil), // 0: protocol.cs.CS_Example_Req
+	(*CS_Heartbeat_Ntf)(nil), // 0: protocol.cs.CS_Heartbeat_Ntf
+	(*SC_Heartbeat_Ntf)(nil), // 1: protocol.cs.SC_Heartbeat_Ntf
+	(*CS_Login_Req)(nil),     // 2: protocol.cs.CS_Login_Req
+	(*SC_Login_Rsp)(nil),     // 3: protocol.cs.SC_Login_Rsp
+	(*CS_Reconnect_Req)(nil), // 4: protocol.cs.CS_Reconnect_Req
+	(*SC_Reconnect_Rsp)(nil), // 5: protocol.cs.SC_Reconnect_Rsp
+	(*SC_Kick_Ntf)(nil),      // 6: protocol.cs.SC_Kick_Ntf
+	(*SC_Error_Rsp)(nil),     // 7: protocol.cs.SC_Error_Rsp
 }
 var file_protocol_cs_lobby_cs_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
@@ -99,7 +536,7 @@ func file_protocol_cs_lobby_cs_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_protocol_cs_lobby_cs_proto_rawDesc), len(file_protocol_cs_lobby_cs_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   1,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

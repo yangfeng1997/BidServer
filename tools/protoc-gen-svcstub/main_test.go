@@ -61,9 +61,6 @@ func TestServerTypeToConst(t *testing.T) {
 	tests := map[string]string{
 		"ST_GATESVR":     "serverTypeGate",
 		"ST_LOBBYSVR":    "serverTypeLobby",
-		"ST_ROOMSVR":     "serverTypeRoom",
-		"ST_MATCHSVR":    "serverTypeMatch",
-		"ST_ONLINESVR":   "serverTypeOnline",
 		"ST_ROUTERAGENT": "serverTypeRouterAgent",
 	}
 	for input, expected := range tests {
@@ -93,7 +90,7 @@ func TestToSnake(t *testing.T) {
 func TestLastSeg(t *testing.T) {
 	tests := map[string]string{
 		"project/protocol/handler": "handler",
-		"project/protocol/service": "service",
+		"project/protocol/remote":  "remote",
 		"no_slash":                 "no_slash",
 	}
 	for input, expected := range tests {

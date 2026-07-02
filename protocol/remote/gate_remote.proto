@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package protocol.remote;
+
+import "google/protobuf/empty.proto";
+import "protocol/common/options.proto";
+
+option go_package = "project/protocol/remote;remotepb";
+
+message RPC_SendToClient_Ntf {}
+message RPC_BindSession_Ntf {}
+message RPC_SetBound_Ntf {}
+
+service GateRemote {
+  option (protocol.common.kind) = BACKEND;
+  option (protocol.common.server_type) = ST_GATESVR;
+
+  rpc SendToClient(RPC_SendToClient_Ntf) returns (google.protobuf.Empty);
+  rpc BindSession(RPC_BindSession_Ntf) returns (google.protobuf.Empty);
+  rpc SetBound(RPC_SetBound_Ntf) returns (google.protobuf.Empty);
+}

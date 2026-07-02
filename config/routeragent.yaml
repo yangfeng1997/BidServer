@@ -1,5 +1,5 @@
-sock_path: "$routeragent_sock_path"
-listen_addr: "$routeragent_listen_addr"
+sock_path: "${routeragent_sock_path}"
+listen_addr: "${routeragent_listen_addr}"
 heartbeat_sec: 30
 
 logger_group:

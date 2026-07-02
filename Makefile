@@ -15,11 +15,11 @@ gen-config:
 
 config: gen-config
 	@echo "  CONFIG env=$(ENV)"
-	@$(PY) tools/config.py --env $(ENV) --out $(RUN_DIR)
+	@$(PY) scripts/config.py --env $(ENV) --out $(RUN_DIR)
 
 build:
 	@echo "  BUILD  services"
-	@$(PY) tools/build.py --out $(RUN_DIR) --build $(BUILD_DIR)
+	@$(PY) scripts/build.py --out $(RUN_DIR) --build $(BUILD_DIR)
 
 test:
 	$(GO) test ./...

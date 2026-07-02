@@ -9,7 +9,7 @@
 
 ## 目录定位
 
-- 面向客户端入口的 handler service 定义。
+- 面向客户端入口的 handler proto 定义。
 - 当前仅保留已有服务相关协议：lobby。
 
 ## 主要文件
@@ -18,5 +18,5 @@
 
 ## 工作规则
 
-- 修改 handler service 后要重新生成 `protocol/gen/routes.go` 和 `protocol/gen/handler/`。
+- 修改 handler proto 后要重新生成 `protocol/gen/routes.go` 和 `protocol/gen/handler/`。
 - 没有对应服务实现的 handler 协议不要引入当前主链路。

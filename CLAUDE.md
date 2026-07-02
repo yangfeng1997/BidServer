@@ -25,7 +25,9 @@
 | `config/` | 配置源、schema、生成产物、values | `config/CLAUDE.md` |
 | `internal/` | 项目私有实现 | `internal/CLAUDE.md` |
 | `pkg/` | 可复用公共库 | `pkg/CLAUDE.md` |
-| `tools/` | 构建、生成、烘焙工具 | `tools/CLAUDE.md` |
+| `tools/` | Go 开发工具与生成器 | `tools/CLAUDE.md` |
+| `scripts/` | 构建、配置烘焙、协议生成脚本入口 | `scripts/CLAUDE.md` |
+| `docs/` | 设计文档、命名规则、TODO 记录 | `docs/框架核心.md` |
 | `other_projects/` | 独立参考项目 | `other_projects/CLAUDE.md` |
 
 ## 当前项目概览
@@ -40,12 +42,15 @@
 ## 入口建议
 
 - 查服务启动：先看 `cmd/<svc>/`，再看 `internal/server/<svc>/`。
-- 查配置：先看 `config/CLAUDE.md`，再看 `config/schema/` 与 `config/gen/`。
-- 查框架核心：先看 `internal/CLAUDE.md`，再看 `internal/core/`。
-- 查节点 ID：先看 `internal/core/nodeid/`。
+- 查配置：先看 `docs/配置系统.md` 与 `config/CLAUDE.md`，再看 `config/schema/` 与 `config/gen/`。
+- 查框架核心：先看 `docs/框架核心.md`，再看 `internal/CLAUDE.md` 与 `internal/core/`。
+- 查节点 ID：先看 `docs/寻址：节点编号.md`，再看 `internal/core/nodeid/`。
 - 查日志：先看 `pkg/logger/` 与 `internal/core/logger/`。
-- 查协议：先看 `protocol/CLAUDE.md`，再看 `protocol/common/`、`protocol/handler/`、`protocol/service/` 与 `protocol/gen/`。
-- 查工具：先看 `tools/CLAUDE.md`，再看 `tools/configgen/`、`tools/gen_routes/`、`tools/protoc-gen-svcstub/` 与 `tools/config.py`、`tools/build.py`。
+- 查协议：先看 `protocol/CLAUDE.md` 与 `docs/协议与业务接口命名规则.md`，再看 `protocol/common/`、`protocol/handler/`、`protocol/remote/` 与 `protocol/gen/`。
+- 查 RouterAgent：先看 `docs/集群通信：路由代理.md`，再看 `internal/server/routeragent/`。
+- 查 RPC：先看 `docs/远程调用设计.md`，再看 `internal/core/rpc/`、`protocol/remote/` 与 `protocol/gen/rpc.go`。
+- 查客户端接入：先看 `docs/客户端接入（网关服）.md`，再看 `internal/core/acceptor/`、`internal/core/conn/`、`internal/core/codec/`、`internal/core/dispatcher/` 与 `internal/core/session/`。
+- 查工具：先看 `docs/代码生成工具.md`、`tools/CLAUDE.md` 与 `scripts/CLAUDE.md`，再看 `tools/configgen/`、`tools/gen_routes/`、`tools/protoc-gen-svcstub/` 与 `scripts/config.py`、`scripts/build.py`。
 
 ## 工程纪律
 

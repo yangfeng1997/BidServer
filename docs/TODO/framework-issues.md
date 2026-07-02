@@ -114,7 +114,7 @@ func NewGateBuilder(opts Options) *Builder {
 ## P1 — 两阶段 `${...}` 占位符 footgun
 
 **现状**:同一 `${...}` 语法两个替换源:
-- 烘焙时(`tools/config.py`):从 `config/values/{env}.yaml` 替换。
+- 烘焙时(`scripts/config.py`):从 `config/values/{env}.yaml` 替换。
 - 运行时(`internal/core/config/loader.go` 的 `LoadYAML`):从进程环境变量替换。
 
 **后果**:key 放错阶段要么静默成功,要么运行时报 "env vars not injected"。
@@ -171,7 +171,7 @@ func NewGateBuilder(opts Options) *Builder {
 
 ## P3 — 工具间重复
 
-**现状**:`DEFAULT_SERVICES` 在 `tools/config.py` 和 `tools/build.py` 各定义一份,真源是 `values/*.yaml` 的 `svr_list`,两份默认值有漂移风险。
+**现状**:`DEFAULT_SERVICES` 在 `scripts/config.py` 和 `scripts/build.py` 各定义一份,真源是 `values/*.yaml` 的 `svr_list`,两份默认值有漂移风险。
 
 **改造方向**:抽公共模块,或强制只信 `svr_list`、删除硬编码默认值。
 

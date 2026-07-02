@@ -24,7 +24,7 @@ message SC_Heartbeat_Ntf {
 message CS_Login_Req {
   option (protocol.common.cmd_id) = 2001;
   string token = 1;
-  uint8 platform = 2;   // 1=iOS 2=Android 3=Web 4=PC
+  uint32 platform = 2;  // 1=iOS 2=Android 3=Web 4=PC
   string device_id = 3;
   string client_version = 4;
 }
