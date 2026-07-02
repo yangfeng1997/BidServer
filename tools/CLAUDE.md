@@ -16,6 +16,8 @@
 ## 子目录
 
 - [`configgen/`](configgen/)
+- [`gen_routes/`](gen_routes/)
+- [`protoc-gen-svcstub/`](protoc-gen-svcstub/)
 - [`servergen/`](servergen/)
 
 ## 主要文件
@@ -29,6 +31,8 @@
 - `config.py` 负责读取环境值并烘焙运行目录。
 - `build.py` 负责按环境编译并铺二进制。
 - `config_bake.py` 负责把模板和环境值渲染成最终配置。
+- `gen_routes/` 负责根据 handler proto 生成路由表。
+- `protoc-gen-svcstub/` 负责生成 handler / service / RPC stub。
 
 ## 工作规则
 

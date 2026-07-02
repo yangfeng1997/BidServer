@@ -44,7 +44,8 @@
 - 查框架核心：先看 `internal/CLAUDE.md`，再看 `internal/core/`。
 - 查节点 ID：先看 `internal/core/nodeid/`。
 - 查日志：先看 `pkg/logger/` 与 `internal/core/logger/`。
-- 查工具：先看 `tools/CLAUDE.md`，再看 `tools/configgen/` 与 `tools/config.py`、`tools/build.py`。
+- 查协议：先看 `protocol/CLAUDE.md`，再看 `protocol/common/`、`protocol/handler/`、`protocol/service/` 与 `protocol/gen/`。
+- 查工具：先看 `tools/CLAUDE.md`，再看 `tools/configgen/`、`tools/gen_routes/`、`tools/protoc-gen-svcstub/` 与 `tools/config.py`、`tools/build.py`。
 
 ## 工程纪律
 

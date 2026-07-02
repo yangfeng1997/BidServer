@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package protocol.common;
+
+option go_package = "project/protocol/common;common";
+
+enum ServerType {
+  ST_UNKNOWN = 0;
+  ST_GATESVR = 1;
+  ST_LOBBYSVR = 2;
+  ST_ROOMSVR = 3;
+  ST_MATCHSVR = 4;
+  ST_ONLINESVR = 5;
+  ST_ROUTERAGENT = 6;
+}

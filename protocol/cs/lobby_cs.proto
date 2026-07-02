@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package protocol.cs;
+
+import "protocol/common/options.proto";
+
+option go_package = "project/protocol/cs;cs";
+
+// 客户端协议：所有 CS_ message 统一定义在此，从网关透明转发到业务服
+
+// -- 通用消息 --
+message CS_Heartbeat_Ntf {
+  option (protocol.common.cmd_id) = 1001;
+  option (protocol.common.no_auth) = true;
+  uint64 client_time = 1;
+}
+
+message SC_Heartbeat_Ntf {
+  option (protocol.common.cmd_id) = 1002;
+  uint64 server_time = 1;
+}
+
+// -- 登录/认证 --
+message CS_Login_Req {
+  option (protocol.common.cmd_id) = 2001;
+  string token = 1;
+  uint8 platform = 2;   // 1=iOS 2=Android 3=Web 4=PC
+  string device_id = 3;
+  string client_version = 4;
+}
+
+message SC_Login_Rsp {
+  option (protocol.common.cmd_id) = 2002;
+  int64 uid = 1;
+  string nickname = 2;
+  uint32 lobby_node_id = 3;  // 分配的 lobby 节点 ID
+}
+
+// -- 重连 --
+message CS_Reconnect_Req {
+  option (protocol.common.cmd_id) = 2003;
+  string token = 1;
+  uint64 session_id = 2;
+}
+
+message SC_Reconnect_Rsp {
+  option (protocol.common.cmd_id) = 2004;
+  bool ok = 1;
+  uint64 new_session_id = 2;
+}
+
+// -- Kick --
+message SC_Kick_Ntf {
+  option (protocol.common.cmd_id) = 2005;
+  uint32 reason = 1;  // 1=重复登录 2=封禁 3=服务器关闭
+  string message = 2;
+}
+
+// -- 通用错误响应 --
+message SC_Error_Rsp {
+  option (protocol.common.cmd_id) = 2006;
+  uint32 cmd_id = 1;  // 原始请求的 cmd_id
+  uint32 err_code = 2;
+  string err_msg = 3;
+}
