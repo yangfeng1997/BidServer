@@ -15,5 +15,4 @@ message RouteragentConfig {
   string listen_addr = 2 [(config.required) = true, (config.env) = true];
   int32 heartbeat_sec = 3 [(config.required) = true, (config.reload) = true];
   LoggerGroupConfig logger_group = 4;
-
 }

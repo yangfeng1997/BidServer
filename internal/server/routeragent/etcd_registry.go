@@ -6,29 +6,42 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"sync"
 	"time"
+
+	"project/internal/core/nodeid"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 // etcd 序列化的节点信息
 type nodeInfoJSON struct {
-	NodeID     uint32 `json:"node_id"`
+	NodeID     string `json:"node_id"`
 	ServerType uint32 `json:"server_type"`
 	RAAddr     string `json:"ra_addr"`
 	StartAt    int64  `json:"start_at"`
 }
 
-// etcd 注册中心
+// EtcdRegistry 保存注册与发现状态
 type EtcdRegistry struct {
 	cli    *clientv3.Client
 	prefix string
+	lease  clientv3.LeaseID
 	nodeID uint32
 	raAddr string
 	stopCh chan struct{}
+	mu     sync.Mutex
 }
 
-// 创建 etcd 注册中心
+// NodePrefix 返回当前集群和 world 下的节点发现前缀。
+func NodePrefix(clusterName, clusterEnv string, worldID uint32) string {
+	if clusterName == "" {
+		clusterName = "bidserver"
+	}
+	return fmt.Sprintf("/%s/%s/worlds/%d/nodes", clusterName, clusterEnv, worldID)
+}
+
+// NewEtcdRegistry 创建 etcd 注册中心
 func NewEtcdRegistry(endpoints []string, prefix string) (*EtcdRegistry, error) {
 	if len(endpoints) == 0 {
 		return nil, fmt.Errorf("etcd endpoints is empty")
@@ -43,43 +56,55 @@ func NewEtcdRegistry(endpoints []string, prefix string) (*EtcdRegistry, error) {
 	if err != nil {
 		return nil, fmt.Errorf("etcd client: %w", err)
 	}
-	return &EtcdRegistry{
-		cli:    cli,
-		prefix: prefix,
-		stopCh: make(chan struct{}),
-	}, nil
+	return &EtcdRegistry{cli: cli, prefix: prefix, stopCh: make(chan struct{})}, nil
 }
 
-// 注册本节点到 etcd，启动 keepalive
+// Register 注册本节点到 etcd
 func (r *EtcdRegistry) Register(nodeID uint32, raAddr string, serverType uint32) error {
 	r.nodeID = nodeID
 	r.raAddr = raAddr
-	key := fmt.Sprintf("%s/%d", r.prefix, nodeID)
-	info := nodeInfoJSON{
-		NodeID:     nodeID,
-		ServerType: serverType,
-		RAAddr:     raAddr,
-		StartAt:    time.Now().Unix(),
+	return r.PutNode(nodeID, raAddr, serverType)
+}
+
+// PutNode 使用当前 lease 注册节点到 etcd
+func (r *EtcdRegistry) PutNode(nodeID uint32, raAddr string, serverType uint32) error {
+	lease, err := r.ensureLease()
+	if err != nil {
+		return err
 	}
+	key := r.nodeKey(nodeID)
+	info := nodeInfoJSON{NodeID: nodeid.String(nodeID), ServerType: serverType, RAAddr: raAddr, StartAt: time.Now().Unix()}
 	data, err := json.Marshal(info)
 	if err != nil {
 		return err
 	}
-	// 创建 lease
-	lease, err := r.cli.Grant(context.Background(), 10)
-	if err != nil {
-		return fmt.Errorf("etcd grant: %w", err)
-	}
-	// put with lease
-	_, err = r.cli.Put(context.Background(), key, string(data), clientv3.WithLease(lease.ID))
-	if err != nil {
+	if _, err = r.cli.Put(context.Background(), key, string(data), clientv3.WithLease(lease)); err != nil {
 		return fmt.Errorf("etcd put: %w", err)
 	}
-	// keepalive
+	return nil
+}
+
+// DeleteNode 删除节点注册
+func (r *EtcdRegistry) DeleteNode(nodeID uint32) error {
+	_, err := r.cli.Delete(context.Background(), r.nodeKey(nodeID))
+	return err
+}
+
+func (r *EtcdRegistry) ensureLease() (clientv3.LeaseID, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.lease != 0 {
+		return r.lease, nil
+	}
+	lease, err := r.cli.Grant(context.Background(), 10)
+	if err != nil {
+		return 0, fmt.Errorf("etcd grant: %w", err)
+	}
 	ch, err := r.cli.KeepAlive(context.Background(), lease.ID)
 	if err != nil {
-		return fmt.Errorf("etcd keepalive: %w", err)
+		return 0, fmt.Errorf("etcd keepalive: %w", err)
 	}
+	r.lease = lease.ID
 	go func() {
 		for {
 			select {
@@ -93,29 +118,47 @@ func (r *EtcdRegistry) Register(nodeID uint32, raAddr string, serverType uint32)
 			}
 		}
 	}()
-	return nil
+	return lease.ID, nil
 }
 
-// 从 etcd 拉取节点并持续 watch
-func (r *EtcdRegistry) Discover(onAdd func(NodeInfo), onDel func(uint32)) error {
+func (r *EtcdRegistry) nodeKey(nodeID uint32) string {
+	return fmt.Sprintf("%s/%s", r.prefix, nodeid.String(nodeID))
+}
+
+type decodedNodeInfo struct {
+	node       NodeInfo
+	serverType uint32
+}
+
+func decodeNodeInfo(data []byte) (decodedNodeInfo, bool) {
+	var info nodeInfoJSON
+	if err := json.Unmarshal(data, &info); err != nil {
+		return decodedNodeInfo{}, false
+	}
+	id, err := nodeid.Parse(info.NodeID)
+	if err != nil {
+		return decodedNodeInfo{}, false
+	}
+	return decodedNodeInfo{
+		node:       NodeInfo{NodeID: id.Uint32(), RAAddr: info.RAAddr, StartAt: info.StartAt},
+		serverType: info.ServerType,
+	}, true
+}
+
+// Discover 拉取并 watch 节点
+func (r *EtcdRegistry) Discover(onAdd func(NodeInfo, uint32), onDel func(uint32)) error {
 	ctx := context.Background()
-	// 初始全量加载
 	resp, err := r.cli.Get(ctx, r.prefix, clientv3.WithPrefix())
 	if err != nil {
 		return fmt.Errorf("etcd get: %w", err)
 	}
 	for _, kv := range resp.Kvs {
-		var info nodeInfoJSON
-		if err := json.Unmarshal(kv.Value, &info); err != nil {
+		info, ok := decodeNodeInfo(kv.Value)
+		if !ok {
 			continue
 		}
-		onAdd(NodeInfo{
-			NodeID:  info.NodeID,
-			RAAddr:  info.RAAddr,
-			StartAt: info.StartAt,
-		})
+		onAdd(info.node, info.serverType)
 	}
-	// watch 增量变更
 	go func() {
 		watchCh := r.cli.Watch(ctx, r.prefix, clientv3.WithPrefix())
 		for {
@@ -129,19 +172,17 @@ func (r *EtcdRegistry) Discover(onAdd func(NodeInfo), onDel func(uint32)) error 
 				for _, ev := range wresp.Events {
 					switch ev.Type {
 					case clientv3.EventTypePut:
-						var info nodeInfoJSON
-						if err := json.Unmarshal(ev.Kv.Value, &info); err != nil {
+						info, ok := decodeNodeInfo(ev.Kv.Value)
+						if !ok {
 							continue
 						}
-						onAdd(NodeInfo{
-							NodeID:  info.NodeID,
-							RAAddr:  info.RAAddr,
-							StartAt: info.StartAt,
-						})
+						onAdd(info.node, info.serverType)
 					case clientv3.EventTypeDelete:
-						var nodeID uint32
-						fmt.Sscanf(path.Base(string(ev.Kv.Key)), "%d", &nodeID)
-						onDel(nodeID)
+						id, err := nodeid.Parse(path.Base(string(ev.Kv.Key)))
+						if err != nil {
+							continue
+						}
+						onDel(id.Uint32())
 					}
 				}
 			}
@@ -150,20 +191,20 @@ func (r *EtcdRegistry) Discover(onAdd func(NodeInfo), onDel func(uint32)) error 
 	return nil
 }
 
-// 按 nodeID 查询 RA 地址
+// PeerAddr 按 nodeID 查询 RA 地址
 func (r *EtcdRegistry) PeerAddr(nodeID uint32) (string, bool) {
-	resp, err := r.cli.Get(context.Background(), fmt.Sprintf("%s/%d", r.prefix, nodeID))
+	resp, err := r.cli.Get(context.Background(), r.nodeKey(nodeID))
 	if err != nil || len(resp.Kvs) == 0 {
 		return "", false
 	}
-	var info nodeInfoJSON
-	if err := json.Unmarshal(resp.Kvs[0].Value, &info); err != nil {
+	info, ok := decodeNodeInfo(resp.Kvs[0].Value)
+	if !ok {
 		return "", false
 	}
-	return info.RAAddr, true
+	return info.node.RAAddr, true
 }
 
-// 关闭 etcd 连接
+// Close 关闭 etcd 连接
 func (r *EtcdRegistry) Close() {
 	select {
 	case <-r.stopCh:
@@ -173,7 +214,7 @@ func (r *EtcdRegistry) Close() {
 	_ = r.cli.Close()
 }
 
-// 从环境变量读取 etcd 地址
+// EtcdEndpointsFromEnv 读取环境变量
 func EtcdEndpointsFromEnv() []string {
 	if v := os.Getenv("ETCD_ENDPOINTS"); v != "" {
 		return []string{v}

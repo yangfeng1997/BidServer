@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net"
 	"os"
+	"path/filepath"
 	"sync"
 )
 
@@ -27,6 +28,11 @@ func NewUDSServer(path string, handler ConnHandler) *UDSServer {
 func (s *UDSServer) Listen() error {
 	if s.path == "" {
 		return errors.New("uds path is empty")
+	}
+	if dir := filepath.Dir(s.path); dir != "." {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
 	}
 	_ = os.Remove(s.path)
 	ln, err := net.Listen("unix", s.path)

@@ -1,8 +1,26 @@
+cluster:
+  name: "${cluster_name}"
+  env: "${cluster_env}"
+  world_id: ${world_id}
+
 etcd:
   endpoints:
-    - "${etcd_endpoint}"
+    - "${etcd_endpoint_1}"
+    - "${etcd_endpoint_2}"
+    - "${etcd_endpoint_3}"
 
 redis:
-  host: "${redis_host}"
-  port: ${redis_port}
+  nodes:
+    - host: "${redis_host}"
+      port: ${redis_port_1}
+    - host: "${redis_host}"
+      port: ${redis_port_2}
+    - host: "${redis_host}"
+      port: ${redis_port_3}
+    - host: "${redis_host}"
+      port: ${redis_port_4}
+    - host: "${redis_host}"
+      port: ${redis_port_5}
+    - host: "${redis_host}"
+      port: ${redis_port_6}
   password: "${REDIS_PWD}"

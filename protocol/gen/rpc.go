@@ -14,6 +14,9 @@ import (
 const (
 	serverTypeGate        = 1
 	serverTypeLobby       = 2
+	serverTypeRoom        = 3
+	serverTypeMatch       = 4
+	serverTypeOnline      = 5
 	serverTypeRouterAgent = 6
 )
 

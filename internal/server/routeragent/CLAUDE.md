@@ -45,6 +45,7 @@
 - 查启动装配先看 `builder.go`，它会注册 `NewModule()`。
 - 查服务配置入口先看 `config.go` 和 `module.go` 的 `ApplyConfig`。
 - 查 UDS 本地进程接入先看 `uds_server.go`、`uds_conn.go` 和 `module.go` 的 `handleFrame`。
+- 查本机节点投递先看 `module.go` 的 `forwardRPC` / `localConn`，RouterAgent 优先按已注册 UDS 连接投递本机节点。
 - 查跨 routeragent 转发先看 `peer_mgr.go`、`peer_conn.go` 和 `tcp_server.go`。
 - 查 etcd 注册 / 发现先看 `etcd_registry.go`。
 - 查路由协议先看 `frame.go`、`rpc_wire.go`、`resolver.go`。

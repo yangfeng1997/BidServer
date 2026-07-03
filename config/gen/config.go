@@ -2,8 +2,15 @@
 package configgen
 
 type CommonConfig struct {
+	Cluster ClusterConfig `yaml:"cluster"`
 	Etcd EtcdConfig `yaml:"etcd"`
 	Redis RedisConfig `yaml:"redis"`
+}
+
+type ClusterConfig struct {
+	Name string `yaml:"name"`
+	Env string `yaml:"env"`
+	WorldId uint32 `yaml:"world_id"`
 }
 
 type EtcdConfig struct {
@@ -11,9 +18,13 @@ type EtcdConfig struct {
 }
 
 type RedisConfig struct {
+	Nodes []RedisNodeConfig `yaml:"nodes"`
+	Password string `yaml:"password"`
+}
+
+type RedisNodeConfig struct {
 	Host string `yaml:"host"`
 	Port int32 `yaml:"port"`
-	Password string `yaml:"password"`
 }
 
 type GateConfig struct {
@@ -22,12 +33,14 @@ type GateConfig struct {
 	MaxConn int32 `yaml:"max_conn"`
 	HeartbeatSec int32 `yaml:"heartbeat_sec"`
 	LoggerGroup LoggerGroupConfig `yaml:"logger_group"`
+	RouteragentSockPath string `yaml:"routeragent_sock_path"`
 }
 
 type LobbyConfig struct {
 	ListenAddr string `yaml:"listen_addr"`
 	MaxPlayer int32 `yaml:"max_player"`
 	HeartbeatSec int32 `yaml:"heartbeat_sec"`
+	RouteragentSockPath string `yaml:"routeragent_sock_path"`
 	LoggerGroup LoggerGroupConfig `yaml:"logger_group"`
 }
 

@@ -6,4 +6,5 @@ type BaseOptions struct {
 	Pprof            bool
 	PprofAddr        string
 	CommonConfigPath string
+	NodeID           string
 }

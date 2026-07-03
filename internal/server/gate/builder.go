@@ -26,6 +26,8 @@ func NewGateBuilder(opts Options) *Builder {
 	baseBuilder := app.NewBaseBuilder(nil)
 	baseBuilder.SetDaemon(opts.Daemon)
 	baseBuilder.SetPprof(opts.Pprof, opts.PprofAddr)
+	baseBuilder.SetNodeID(opts.NodeID)
+	baseBuilder.AddModule(NewModule())
 	baseBuilder.AddShutdownHook(loggerGroup.Shutdown)
 	baseBuilder.AddReloadHook(ReloadConfig)
 

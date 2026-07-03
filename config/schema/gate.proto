@@ -16,4 +16,5 @@ message GateConfig {
   int32 max_conn = 3 [(config.required) = true];
   int32 heartbeat_sec = 4 [(config.required) = true, (config.reload) = true];
   LoggerGroupConfig logger_group = 5;
+  string routeragent_sock_path = 6 [(config.required) = true, (config.env) = true];
 }

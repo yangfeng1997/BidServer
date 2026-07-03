@@ -25,6 +25,10 @@ const (
 
 type RPC_SendToClient_Ntf struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	Uid           int64                  `protobuf:"varint,1,opt,name=uid,proto3" json:"uid,omitempty"`
+	SessionId     string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	CmdId         uint32                 `protobuf:"varint,3,opt,name=cmd_id,json=cmdId,proto3" json:"cmd_id,omitempty"`
+	Payload       []byte                 `protobuf:"bytes,4,opt,name=payload,proto3" json:"payload,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -59,8 +63,39 @@ func (*RPC_SendToClient_Ntf) Descriptor() ([]byte, []int) {
 	return file_protocol_remote_gate_remote_proto_rawDescGZIP(), []int{0}
 }
 
+func (x *RPC_SendToClient_Ntf) GetUid() int64 {
+	if x != nil {
+		return x.Uid
+	}
+	return 0
+}
+
+func (x *RPC_SendToClient_Ntf) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *RPC_SendToClient_Ntf) GetCmdId() uint32 {
+	if x != nil {
+		return x.CmdId
+	}
+	return 0
+}
+
+func (x *RPC_SendToClient_Ntf) GetPayload() []byte {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
 type RPC_BindSession_Ntf struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Uid           int64                  `protobuf:"varint,2,opt,name=uid,proto3" json:"uid,omitempty"`
+	BoundNodes    map[uint32]uint32      `protobuf:"bytes,3,rep,name=bound_nodes,json=boundNodes,proto3" json:"bound_nodes,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -95,8 +130,32 @@ func (*RPC_BindSession_Ntf) Descriptor() ([]byte, []int) {
 	return file_protocol_remote_gate_remote_proto_rawDescGZIP(), []int{1}
 }
 
+func (x *RPC_BindSession_Ntf) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *RPC_BindSession_Ntf) GetUid() int64 {
+	if x != nil {
+		return x.Uid
+	}
+	return 0
+}
+
+func (x *RPC_BindSession_Ntf) GetBoundNodes() map[uint32]uint32 {
+	if x != nil {
+		return x.BoundNodes
+	}
+	return nil
+}
+
 type RPC_SetBound_Ntf struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	Uid           int64                  `protobuf:"varint,1,opt,name=uid,proto3" json:"uid,omitempty"`
+	ServerType    uint32                 `protobuf:"varint,2,opt,name=server_type,json=serverType,proto3" json:"server_type,omitempty"`
+	NodeId        uint32                 `protobuf:"varint,3,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -131,14 +190,52 @@ func (*RPC_SetBound_Ntf) Descriptor() ([]byte, []int) {
 	return file_protocol_remote_gate_remote_proto_rawDescGZIP(), []int{2}
 }
 
+func (x *RPC_SetBound_Ntf) GetUid() int64 {
+	if x != nil {
+		return x.Uid
+	}
+	return 0
+}
+
+func (x *RPC_SetBound_Ntf) GetServerType() uint32 {
+	if x != nil {
+		return x.ServerType
+	}
+	return 0
+}
+
+func (x *RPC_SetBound_Ntf) GetNodeId() uint32 {
+	if x != nil {
+		return x.NodeId
+	}
+	return 0
+}
+
 var File_protocol_remote_gate_remote_proto protoreflect.FileDescriptor
 
 const file_protocol_remote_gate_remote_proto_rawDesc = "" +
 	"\n" +
-	"!protocol/remote/gate_remote.proto\x12\x0fprotocol.remote\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1dprotocol/common/options.proto\"\x16\n" +
-	"\x14RPC_SendToClient_Ntf\"\x15\n" +
-	"\x13RPC_BindSession_Ntf\"\x12\n" +
-	"\x10RPC_SetBound_Ntf2\xf9\x01\n" +
+	"!protocol/remote/gate_remote.proto\x12\x0fprotocol.remote\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1dprotocol/common/options.proto\"x\n" +
+	"\x14RPC_SendToClient_Ntf\x12\x10\n" +
+	"\x03uid\x18\x01 \x01(\x03R\x03uid\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x02 \x01(\tR\tsessionId\x12\x15\n" +
+	"\x06cmd_id\x18\x03 \x01(\rR\x05cmdId\x12\x18\n" +
+	"\apayload\x18\x04 \x01(\fR\apayload\"\xdc\x01\n" +
+	"\x13RPC_BindSession_Ntf\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x10\n" +
+	"\x03uid\x18\x02 \x01(\x03R\x03uid\x12U\n" +
+	"\vbound_nodes\x18\x03 \x03(\v24.protocol.remote.RPC_BindSession_Ntf.BoundNodesEntryR\n" +
+	"boundNodes\x1a=\n" +
+	"\x0fBoundNodesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\rR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\rR\x05value:\x028\x01\"^\n" +
+	"\x10RPC_SetBound_Ntf\x12\x10\n" +
+	"\x03uid\x18\x01 \x01(\x03R\x03uid\x12\x1f\n" +
+	"\vserver_type\x18\x02 \x01(\rR\n" +
+	"serverType\x12\x17\n" +
+	"\anode_id\x18\x03 \x01(\rR\x06nodeId2\xf9\x01\n" +
 	"\n" +
 	"GateRemote\x12M\n" +
 	"\fSendToClient\x12%.protocol.remote.RPC_SendToClient_Ntf\x1a\x16.google.protobuf.Empty\x12K\n" +
@@ -157,25 +254,27 @@ func file_protocol_remote_gate_remote_proto_rawDescGZIP() []byte {
 	return file_protocol_remote_gate_remote_proto_rawDescData
 }
 
-var file_protocol_remote_gate_remote_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_protocol_remote_gate_remote_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_protocol_remote_gate_remote_proto_goTypes = []any{
 	(*RPC_SendToClient_Ntf)(nil), // 0: protocol.remote.RPC_SendToClient_Ntf
 	(*RPC_BindSession_Ntf)(nil),  // 1: protocol.remote.RPC_BindSession_Ntf
 	(*RPC_SetBound_Ntf)(nil),     // 2: protocol.remote.RPC_SetBound_Ntf
-	(*emptypb.Empty)(nil),        // 3: google.protobuf.Empty
+	nil,                          // 3: protocol.remote.RPC_BindSession_Ntf.BoundNodesEntry
+	(*emptypb.Empty)(nil),        // 4: google.protobuf.Empty
 }
 var file_protocol_remote_gate_remote_proto_depIdxs = []int32{
-	0, // 0: protocol.remote.GateRemote.SendToClient:input_type -> protocol.remote.RPC_SendToClient_Ntf
-	1, // 1: protocol.remote.GateRemote.BindSession:input_type -> protocol.remote.RPC_BindSession_Ntf
-	2, // 2: protocol.remote.GateRemote.SetBound:input_type -> protocol.remote.RPC_SetBound_Ntf
-	3, // 3: protocol.remote.GateRemote.SendToClient:output_type -> google.protobuf.Empty
-	3, // 4: protocol.remote.GateRemote.BindSession:output_type -> google.protobuf.Empty
-	3, // 5: protocol.remote.GateRemote.SetBound:output_type -> google.protobuf.Empty
-	3, // [3:6] is the sub-list for method output_type
-	0, // [0:3] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	3, // 0: protocol.remote.RPC_BindSession_Ntf.bound_nodes:type_name -> protocol.remote.RPC_BindSession_Ntf.BoundNodesEntry
+	0, // 1: protocol.remote.GateRemote.SendToClient:input_type -> protocol.remote.RPC_SendToClient_Ntf
+	1, // 2: protocol.remote.GateRemote.BindSession:input_type -> protocol.remote.RPC_BindSession_Ntf
+	2, // 3: protocol.remote.GateRemote.SetBound:input_type -> protocol.remote.RPC_SetBound_Ntf
+	4, // 4: protocol.remote.GateRemote.SendToClient:output_type -> google.protobuf.Empty
+	4, // 5: protocol.remote.GateRemote.BindSession:output_type -> google.protobuf.Empty
+	4, // 6: protocol.remote.GateRemote.SetBound:output_type -> google.protobuf.Empty
+	4, // [4:7] is the sub-list for method output_type
+	1, // [1:4] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_protocol_remote_gate_remote_proto_init() }
@@ -189,7 +288,7 @@ func file_protocol_remote_gate_remote_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_protocol_remote_gate_remote_proto_rawDesc), len(file_protocol_remote_gate_remote_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

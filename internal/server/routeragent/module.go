@@ -12,6 +12,7 @@ import (
 
 	"project/internal/core/app"
 	"project/internal/core/nodeid"
+	"project/protocol/common"
 )
 
 const (
@@ -31,6 +32,7 @@ type Module struct {
 	keepalive   *KeepAlive
 	udsServer   *UDSServer
 	tcpServer   *TCPServer
+	registry    *EtcdRegistry
 	listenAddr  string
 	stopCh      chan struct{}
 
@@ -73,6 +75,15 @@ func (m *Module) Init() error {
 	} else {
 		m.poster = PosterFunc(func(fn func()) { fn() })
 	}
+	commonCfg := CommonConfig()
+	if commonCfg != nil && m.App().NodeIDUint32() != 0 {
+		prefix := NodePrefix(commonCfg.Cluster.Name, commonCfg.Cluster.Env, commonCfg.Cluster.WorldId)
+		registry, err := NewEtcdRegistry(commonCfg.Etcd.Endpoints, prefix)
+		if err != nil {
+			return err
+		}
+		m.registry = registry
+	}
 	return nil
 }
 
@@ -85,6 +96,28 @@ func (m *Module) AfterInit() error {
 	}
 	go m.udsServer.Serve(m.stopCh)
 	go m.keepalive.Run(m.stopCh)
+
+	if m.registry != nil {
+		serverType := uint32(common.ServerType_ST_ROUTERAGENT)
+		if err := m.registry.Register(m.App().NodeIDUint32(), m.listenAddr, serverType); err != nil {
+			m.ready.Fail(err)
+			return err
+		}
+		if err := m.registry.Discover(func(info NodeInfo, serverType uint32) {
+			upsertInfo := info
+			st := serverType
+			m.poster.Post(func() {
+				m.memberTable.Upsert(upsertInfo, st)
+			})
+		}, func(nodeID uint32) {
+			m.poster.Post(func() {
+				m.memberTable.Delete(nodeID)
+			})
+		}); err != nil {
+			m.ready.Fail(err)
+			return err
+		}
+	}
 	if m.listenAddr != "" {
 		m.peerMgr.SetListenAddr(m.listenAddr)
 		m.tcpServer = NewTCPServer(m.listenAddr, m.listenAddr, m.handleIncomingPeer)
@@ -107,6 +140,9 @@ func (m *Module) BeforeShutdown() {
 	case <-m.stopCh:
 	default:
 		close(m.stopCh)
+	}
+	if m.registry != nil {
+		m.registry.Close()
 	}
 	if m.udsServer != nil {
 		_ = m.udsServer.Close()
@@ -148,9 +184,15 @@ func (m *Module) handleFrame(c *UDSConn, frame Frame) {
 		}
 		nodeID := binary.BigEndian.Uint32(frame.Body[:4])
 		_, serverType, _ := nodeid.Decode(nodeID)
+		if m.registry != nil {
+			if err := m.registry.PutNode(nodeID, m.listenAddr, serverType); err != nil {
+				_ = c.Send(Frame{Type: FrameHandshakeAck, Body: []byte{0}})
+				return
+			}
+		}
 		m.memberTable.Upsert(NodeInfo{
 			NodeID:  nodeID,
-			RAAddr:  c.RemoteAddr(),
+			RAAddr:  m.listenAddr,
 			StartAt: time.Now().Unix(),
 		}, serverType)
 		m.registerConn(nodeID, c)
@@ -194,7 +236,6 @@ func (m *Module) routeFrame(c *UDSConn, frame Frame) {
 func (m *Module) forwardRPC(c *UDSConn, frame Frame, head RPCWireHeader) {
 	m.metrics.ForwardTotal.Add(1)
 	targets := m.pickTargets(head)
-	// 保存原始调用者 seq，避免广播循环覆盖
 	origSeqID := head.SeqID
 	if len(targets) == 0 {
 		return
@@ -204,11 +245,8 @@ func (m *Module) forwardRPC(c *UDSConn, frame Frame, head RPCWireHeader) {
 		if !ok {
 			continue
 		}
-		if info.RAAddr == c.RemoteAddr() {
-			local := m.localConn(nodeID)
-			if local != nil {
-				_ = local.Send(frame)
-			}
+		if local := m.localConn(nodeID); local != nil {
+			_ = local.Send(frame)
 			continue
 		}
 		peer := m.peerMgr.Get(info.RAAddr)
@@ -275,7 +313,8 @@ func (m *Module) routeLegacyFrame(c *UDSConn, frame Frame) {
 	if !ok {
 		return
 	}
-	if info.RAAddr == c.RemoteAddr() {
+	if local := m.localConn(nodeID); local != nil {
+		_ = local.Send(frame)
 		return
 	}
 	peer := m.peerMgr.Get(info.RAAddr)
@@ -320,13 +359,21 @@ func (m *Module) registerConn(nodeID uint32, c *UDSConn) {
 
 func (m *Module) removeConn(c *UDSConn) {
 	m.metrics.PeerDisconnectTotal.Add(1)
+	removed := make([]uint32, 0, 1)
 	m.connMu.Lock()
 	for nodeID, conn := range m.localConns {
 		if conn == c {
 			delete(m.localConns, nodeID)
+			removed = append(removed, nodeID)
 		}
 	}
 	m.connMu.Unlock()
+	for _, nodeID := range removed {
+		m.memberTable.Delete(nodeID)
+		if m.registry != nil {
+			_ = m.registry.DeleteNode(nodeID)
+		}
+	}
 	m.remoteSeq.DeleteByConn(c)
 }
 

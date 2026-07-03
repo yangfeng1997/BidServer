@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"project/internal/core/logger"
+	"project/internal/core/nodeid"
 	"project/internal/core/process"
 	"project/pkg/taskqueue"
 )
@@ -27,6 +28,8 @@ type App interface {
 	DoneRoutine()
 	IsRunning() bool
 	IsDaemon() bool
+	NodeID() string
+	NodeIDUint32() uint32
 	RegisterModule(module Module) error
 	GetModule(name string) (Module, error)
 }
@@ -41,6 +44,7 @@ type BaseApp struct {
 	daemon        bool
 	pprof         bool
 	pprofAddr     string
+	nodeID        string
 	modulesMap    map[string]Module
 	modulesArray  []moduleWrapper
 	shutdownHooks []func()
@@ -48,7 +52,7 @@ type BaseApp struct {
 	postQueue     *taskqueue.Queue
 }
 
-func NewBaseApp(dieChan chan bool, daemon bool, pprof bool, pprofAddr string, shutdownHooks []func(), reloadHooks []func() error) *BaseApp {
+func NewBaseApp(dieChan chan bool, daemon bool, pprof bool, pprofAddr string, nodeID string, shutdownHooks []func(), reloadHooks []func() error) *BaseApp {
 	if dieChan == nil {
 		dieChan = make(chan bool)
 	}
@@ -60,6 +64,7 @@ func NewBaseApp(dieChan chan bool, daemon bool, pprof bool, pprofAddr string, sh
 		daemon:        daemon,
 		pprof:         pprof,
 		pprofAddr:     pprofAddr,
+		nodeID:        nodeID,
 		modulesMap:    make(map[string]Module),
 		shutdownHooks: append([]func(){}, shutdownHooks...),
 		reloadHooks:   append([]func() error{}, reloadHooks...),
@@ -268,6 +273,18 @@ func (app *BaseApp) IsRunning() bool {
 
 func (app *BaseApp) IsDaemon() bool {
 	return app.daemon
+}
+
+func (app *BaseApp) NodeID() string {
+	return app.nodeID
+}
+
+func (app *BaseApp) NodeIDUint32() uint32 {
+	id, err := nodeid.Parse(app.nodeID)
+	if err != nil {
+		return 0
+	}
+	return id.Uint32()
 }
 
 func (app *BaseApp) RegisterModule(module Module) error {

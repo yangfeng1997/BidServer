@@ -2,7 +2,7 @@ listen_tcp: "${gate_listen_tcp}"
 listen_ws:  "${gate_listen_ws}"
 max_conn: 10000
 heartbeat_sec: 30
-
+routeragent_sock_path: "${routeragent_sock_path}"
 
 logger_group:
   main:

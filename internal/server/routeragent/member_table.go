@@ -39,6 +39,26 @@ func (m *MemberTable) Upsert(info NodeInfo, serverType uint32) {
 	m.byServerType[serverType] = append(filtered, info)
 }
 
+// Delete 删除指定 nodeID
+func (m *MemberTable) Delete(nodeID uint32) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.byNodeID, nodeID)
+	for serverType, items := range m.byServerType {
+		filtered := items[:0]
+		for _, it := range items {
+			if it.NodeID != nodeID {
+				filtered = append(filtered, it)
+			}
+		}
+		if len(filtered) == 0 {
+			delete(m.byServerType, serverType)
+			continue
+		}
+		m.byServerType[serverType] = filtered
+	}
+}
+
 // GetByNodeID 按 nodeID 查询
 func (m *MemberTable) GetByNodeID(id uint32) (NodeInfo, bool) {
 	m.mu.RLock()

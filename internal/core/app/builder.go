@@ -7,6 +7,7 @@ type Builder interface {
 	AddReloadHook(hook func() error)
 	SetDaemon(daemon bool)
 	SetPprof(enabled bool, addr string)
+	SetNodeID(nodeID string)
 }
 
 type BaseBuilder struct {
@@ -14,6 +15,7 @@ type BaseBuilder struct {
 	daemon              bool
 	pprof               bool
 	pprofAddr           string
+	nodeID              string
 	moduleRegistrations []moduleWrapper
 	shutdownHooks       []func()
 	reloadHooks         []func() error
@@ -38,6 +40,10 @@ func (builder *BaseBuilder) SetPprof(enabled bool, addr string) {
 	builder.pprofAddr = addr
 }
 
+func (builder *BaseBuilder) SetNodeID(nodeID string) {
+	builder.nodeID = nodeID
+}
+
 func (builder *BaseBuilder) AddModule(module Module) {
 	builder.moduleRegistrations = append(builder.moduleRegistrations, moduleWrapper{
 		name:   module.Name(),
@@ -54,7 +60,7 @@ func (builder *BaseBuilder) AddReloadHook(hook func() error) {
 }
 
 func (builder *BaseBuilder) Build() (App, error) {
-	app := NewBaseApp(builder.dieChan, builder.daemon, builder.pprof, builder.pprofAddr, builder.shutdownHooks, builder.reloadHooks)
+	app := NewBaseApp(builder.dieChan, builder.daemon, builder.pprof, builder.pprofAddr, builder.nodeID, builder.shutdownHooks, builder.reloadHooks)
 
 	for _, registration := range builder.moduleRegistrations {
 		if err := app.RegisterModule(registration.module); err != nil {

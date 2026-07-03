@@ -10,8 +10,15 @@ message CommonConfig {
   option (config.root) = true;
   option (config.common) = true;
 
-  EtcdConfig etcd = 1;
-  RedisConfig redis = 2;
+  ClusterConfig cluster = 1;
+  EtcdConfig etcd = 2;
+  RedisConfig redis = 3;
+}
+
+message ClusterConfig {
+  string name = 1 [(config.required) = true];
+  string env = 2 [(config.required) = true];
+  uint32 world_id = 3 [(config.required) = true];
 }
 
 message EtcdConfig {
@@ -19,7 +26,11 @@ message EtcdConfig {
 }
 
 message RedisConfig {
+  repeated RedisNodeConfig nodes = 1 [(config.required) = true];
+  string password = 2 [(config.required) = true, (config.env) = true];
+}
+
+message RedisNodeConfig {
   string host = 1 [(config.required) = true];
   int32 port = 2 [(config.required) = true];
-  string password = 3 [(config.required) = true, (config.env) = true];
 }

@@ -32,6 +32,7 @@ def main() -> None:
     parser.add_argument("--conf", default="config", help="config source directory")
     parser.add_argument("--out", default="run", help="runtime output directory")
     parser.add_argument("--svr", default="", help="prepare only one service")
+    parser.add_argument("--world-id", required=True, type=parse_world_id, help="world id used to derive node_id")
     parser.add_argument("--dry-run", action="store_true", help="print plan without writing files")
     args = parser.parse_args()
 
@@ -42,6 +43,9 @@ def main() -> None:
 
     values_raw = load_yaml(values_path)
     values = load_values(values_path)
+    values["world_id"] = str(args.world_id)
+    values.setdefault("cluster_name", "bidserver")
+    values.setdefault("cluster_env", args.env)
     services = services_from_values(values_raw)
     if args.svr:
         services = [args.svr]
@@ -57,7 +61,7 @@ def main() -> None:
 
     if not args.dry_run:
         prepare_runtime_dirs(out_dir, services)
-        write_runtime_scripts(out_dir, services)
+        write_runtime_scripts(out_dir, services, args.world_id)
         write_env(out_dir / "ENV", args.env)
 
     print(f"config done env={args.env} services={','.join(services)}")
@@ -65,6 +69,16 @@ def main() -> None:
 
 def project_root() -> Path:
     return Path(__file__).resolve().parents[1]
+
+
+def parse_world_id(value: str) -> int:
+    try:
+        world_id = int(value, 10)
+    except ValueError:
+        raise argparse.ArgumentTypeError("world id must be an integer") from None
+    if world_id <= 0 or world_id > 0xFFFF:
+        raise argparse.ArgumentTypeError("world id must be in range 1..65535")
+    return world_id
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
@@ -81,7 +95,7 @@ def services_from_values(data: dict[str, Any]) -> list[str]:
     services = data.get("svr_list") or []
     if not isinstance(services, list):
         sys.exit("ERROR: svr_list must be a yaml list")
-    return sorted(str(service) for service in services)
+    return [str(service) for service in services]
 
 
 def validate_services(root: Path, conf_dir: Path, services: list[str]) -> None:
@@ -102,6 +116,22 @@ def build_targets(conf_dir: Path, out_dir: Path, services: list[str]) -> list[tu
         base = service.removesuffix("svr")
         targets.append((service, resolve_template(conf_dir, base), out_dir / service / "conf" / f"{base}.yaml"))
     return targets
+
+
+def node_id(world_id: int, service: str) -> str:
+    return f"{world_id}.{server_type(service)}.0"
+
+
+def server_type(service: str) -> int:
+    match service:
+        case "gatesvr":
+            return 1
+        case "lobbysvr":
+            return 2
+        case "routeragent":
+            return 6
+        case _:
+            sys.exit(f"ERROR: server type mapping missing for {service}")
 
 
 def resolve_template(conf_dir: Path, base: str) -> Path:
@@ -125,15 +155,16 @@ def prepare_runtime_dirs(out_dir: Path, services: list[str]) -> None:
             (out_dir / service / dirname).mkdir(parents=True, exist_ok=True)
 
 
-def write_runtime_scripts(out_dir: Path, services: list[str]) -> None:
+def write_runtime_scripts(out_dir: Path, services: list[str], world_id: int) -> None:
     for service in services:
-        write_service_scripts(out_dir, service)
+        write_service_scripts(out_dir, service, world_id)
     write_all_script(out_dir / "startall.sh", services, "start")
     write_all_script(out_dir / "stopall.sh", reversed(services), "stop")
 
 
-def write_service_scripts(out_dir: Path, service: str) -> None:
+def write_service_scripts(out_dir: Path, service: str, world_id: int) -> None:
     service_flag, service_config = service_config_args(service)
+    service_node_id = node_id(world_id, service)
     bin_dir = out_dir / service / "bin"
     start_content = f"""#!/bin/sh
 DIR=\"$(cd \"$(dirname \"$0\")\" && pwd)\"
@@ -144,7 +175,7 @@ STDERR_LOG="$LOG_DIR/{service}.stderr.log"
 mkdir -p "$LOG_DIR"
 : > "$STDOUT_LOG"
 : > "$STDERR_LOG"
-exec ./{service} --pid-file {service}.pid --daemon --common-config ../../common/conf/common.yaml {service_flag} ../conf/{service_config} 1>>"$STDOUT_LOG" 2>>"$STDERR_LOG"
+exec ./{service} --pid-file {service}.pid --nodeid {service_node_id} --daemon --common-config ../../common/conf/common.yaml {service_flag} ../conf/{service_config} 1>>"$STDOUT_LOG" 2>>"$STDERR_LOG"
 """
     stop_content = f"""#!/bin/sh
 DIR=\"$(cd \"$(dirname \"$0\")\" && pwd)\"

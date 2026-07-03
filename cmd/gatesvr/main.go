@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/pflag"
 
+	"project/internal/core/nodeid"
 	opt "project/internal/core/options"
 	"project/internal/core/process"
 	"project/internal/server/gate"
@@ -33,6 +34,12 @@ func execute() error {
 	if opts.GateConfigPath == "" {
 		return fmt.Errorf("gate config path is required")
 	}
+	if opts.NodeID == "" {
+		return fmt.Errorf("nodeid is required")
+	}
+	if _, err := nodeid.Parse(opts.NodeID); err != nil {
+		return err
+	}
 	if opts.Daemon {
 		started, err := process.StartDaemon()
 		if err != nil {
@@ -50,6 +57,7 @@ func execute() error {
 			Pprof:            opts.Pprof,
 			PprofAddr:        opts.PprofAddr,
 			CommonConfigPath: opts.CommonConfigPath,
+			NodeID:           opts.NodeID,
 		},
 		GateConfigPath: opts.GateConfigPath,
 	})
@@ -72,6 +80,7 @@ func execute() error {
 
 func bindFlags(opts *gate.Options) {
 	pflag.StringVarP(&opts.PidFile, "pid-file", "p", "gatesvr.pid", "pid file path")
+	pflag.StringVar(&opts.NodeID, "nodeid", "", "node id in world.serverType.index format")
 	pflag.StringVar(&opts.CommonConfigPath, "common-config", "", "common config path")
 	pflag.StringVar(&opts.GateConfigPath, "gate-config", "", "gate config path")
 	pflag.BoolVar(&opts.Daemon, "daemon", false, "run as daemon")

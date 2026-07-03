@@ -30,9 +30,29 @@ func TestRouteFrame(t *testing.T) {
 	m.MemberTable().Upsert(NodeInfo{NodeID: nodeID, RAAddr: "peer"}, 2)
 	link := &UDSConn{remoteAddr: "peer", done: make(chan struct{}), sendCh: make(chan Frame, 1), recvCh: make(chan Frame, 1)}
 	m.PeerMgr().Attach("peer", link)
-	m.routeFrame(&UDSConn{remoteAddr: "local"}, Frame{Type: FrameRpcRequest, Body: EncodeRouteBody(nodeID, []byte("hi"))})
+	head := RPCWireHeader{ServerType: 2, RoutingMode: uint8(RoutingModeDirect), RoutingKey: "16909060", Route: "test"}
+	m.routeFrame(&UDSConn{remoteAddr: "local"}, Frame{Type: FrameRpcRequest, Header: EncodeRPCWireHeader(head), Body: []byte("hi")})
 	select {
-	case <-link.recvCh:
+	case <-link.sendCh:
 	default:
+		t.Fatal("expected frame to be forwarded to peer")
+	}
+}
+
+func TestRouteFrameUsesRegisteredLocalConn(t *testing.T) {
+	m := NewModule()
+	nodeID := uint32(0x01020304)
+	local := &UDSConn{remoteAddr: "unix://local", done: make(chan struct{}), sendCh: make(chan Frame, 1), recvCh: make(chan Frame, 1)}
+	m.MemberTable().Upsert(NodeInfo{NodeID: nodeID, RAAddr: "unix://same-ra"}, 2)
+	m.RegisterConn(nodeID, local)
+	head := RPCWireHeader{ServerType: 2, RoutingMode: uint8(RoutingModeDirect), RoutingKey: "16909060", Route: "test"}
+	m.routeFrame(&UDSConn{remoteAddr: "unix://caller"}, Frame{Type: FrameRpcNotify, Header: EncodeRPCWireHeader(head), Body: []byte("hi")})
+	select {
+	case got := <-local.sendCh:
+		if string(got.Body) != "hi" {
+			t.Fatalf("local body=%q, want hi", string(got.Body))
+		}
+	default:
+		t.Fatal("expected frame to be delivered to registered local conn")
 	}
 }

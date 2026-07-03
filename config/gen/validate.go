@@ -7,11 +7,30 @@ func (cfg *CommonConfig) Validate() error {
 	if cfg == nil {
 		return fmt.Errorf("config is nil")
 	}
+	if err := cfg.Cluster.Validate(); err != nil {
+		return fmt.Errorf("cluster: %w", err)
+	}
 	if err := cfg.Etcd.Validate(); err != nil {
 		return fmt.Errorf("etcd: %w", err)
 	}
 	if err := cfg.Redis.Validate(); err != nil {
 		return fmt.Errorf("redis: %w", err)
+	}
+	return nil
+}
+
+func (cfg *ClusterConfig) Validate() error {
+	if cfg == nil {
+		return fmt.Errorf("config is nil")
+	}
+	if cfg.Name == "" {
+		return fmt.Errorf("name is required")
+	}
+	if cfg.Env == "" {
+		return fmt.Errorf("env is required")
+	}
+	if cfg.WorldId == 0 {
+		return fmt.Errorf("world_id is required")
 	}
 	return nil
 }
@@ -30,14 +49,24 @@ func (cfg *RedisConfig) Validate() error {
 	if cfg == nil {
 		return fmt.Errorf("config is nil")
 	}
+	if len(cfg.Nodes) == 0 {
+		return fmt.Errorf("nodes is required")
+	}
+	if cfg.Password == "" {
+		return fmt.Errorf("password is required")
+	}
+	return nil
+}
+
+func (cfg *RedisNodeConfig) Validate() error {
+	if cfg == nil {
+		return fmt.Errorf("config is nil")
+	}
 	if cfg.Host == "" {
 		return fmt.Errorf("host is required")
 	}
 	if cfg.Port == 0 {
 		return fmt.Errorf("port is required")
-	}
-	if cfg.Password == "" {
-		return fmt.Errorf("password is required")
 	}
 	return nil
 }
@@ -61,6 +90,9 @@ func (cfg *GateConfig) Validate() error {
 	if err := cfg.LoggerGroup.Validate(); err != nil {
 		return fmt.Errorf("logger_group: %w", err)
 	}
+	if cfg.RouteragentSockPath == "" {
+		return fmt.Errorf("routeragent_sock_path is required")
+	}
 	return nil
 }
 
@@ -76,6 +108,9 @@ func (cfg *LobbyConfig) Validate() error {
 	}
 	if cfg.HeartbeatSec == 0 {
 		return fmt.Errorf("heartbeat_sec is required")
+	}
+	if cfg.RouteragentSockPath == "" {
+		return fmt.Errorf("routeragent_sock_path is required")
 	}
 	if err := cfg.LoggerGroup.Validate(); err != nil {
 		return fmt.Errorf("logger_group: %w", err)

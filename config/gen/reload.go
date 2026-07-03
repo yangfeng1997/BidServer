@@ -10,14 +10,20 @@ func CheckCommonReload(candidate *CommonConfig, current *CommonConfig) error {
 	if candidate == nil || current == nil {
 		return nil
 	}
+	if !reflect.DeepEqual(candidate.Cluster.Name, current.Cluster.Name) {
+		return fmt.Errorf("cluster.name cannot reload")
+	}
+	if !reflect.DeepEqual(candidate.Cluster.Env, current.Cluster.Env) {
+		return fmt.Errorf("cluster.env cannot reload")
+	}
+	if !reflect.DeepEqual(candidate.Cluster.WorldId, current.Cluster.WorldId) {
+		return fmt.Errorf("cluster.world_id cannot reload")
+	}
 	if !reflect.DeepEqual(candidate.Etcd.Endpoints, current.Etcd.Endpoints) {
 		return fmt.Errorf("etcd.endpoints cannot reload")
 	}
-	if !reflect.DeepEqual(candidate.Redis.Host, current.Redis.Host) {
-		return fmt.Errorf("redis.host cannot reload")
-	}
-	if !reflect.DeepEqual(candidate.Redis.Port, current.Redis.Port) {
-		return fmt.Errorf("redis.port cannot reload")
+	if !reflect.DeepEqual(candidate.Redis.Nodes, current.Redis.Nodes) {
+		return fmt.Errorf("redis.nodes cannot reload")
 	}
 	if !reflect.DeepEqual(candidate.Redis.Password, current.Redis.Password) {
 		return fmt.Errorf("redis.password cannot reload")
@@ -110,6 +116,9 @@ func CheckGateReload(candidate *GateConfig, current *GateConfig) error {
 	if !reflect.DeepEqual(candidate.LoggerGroup.Tracing.RotateByHour, current.LoggerGroup.Tracing.RotateByHour) {
 		return fmt.Errorf("logger_group.tracing.rotate_by_hour cannot reload")
 	}
+	if !reflect.DeepEqual(candidate.RouteragentSockPath, current.RouteragentSockPath) {
+		return fmt.Errorf("routeragent_sock_path cannot reload")
+	}
 	return nil
 }
 
@@ -122,6 +131,9 @@ func CheckLobbyReload(candidate *LobbyConfig, current *LobbyConfig) error {
 	}
 	if !reflect.DeepEqual(candidate.MaxPlayer, current.MaxPlayer) {
 		return fmt.Errorf("max_player cannot reload")
+	}
+	if !reflect.DeepEqual(candidate.RouteragentSockPath, current.RouteragentSockPath) {
+		return fmt.Errorf("routeragent_sock_path cannot reload")
 	}
 	if !reflect.DeepEqual(candidate.LoggerGroup.Main.Level, current.LoggerGroup.Main.Level) {
 		return fmt.Errorf("logger_group.main.level cannot reload")

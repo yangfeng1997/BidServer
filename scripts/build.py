@@ -68,7 +68,7 @@ def read_services(path: Path) -> list[str]:
     services = data.get("svr_list") or []
     if not isinstance(services, list):
         sys.exit("ERROR: svr_list must be a yaml list")
-    return sorted(str(service) for service in services)
+    return [str(service) for service in services]
 
 
 def validate_runtime_dirs(root: Path, out_dir: Path, services: list[str]) -> None:
