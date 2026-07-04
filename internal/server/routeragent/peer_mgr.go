@@ -232,6 +232,7 @@ func (m *Module) sendPeerOutbound(link PeerLink, item peerOutbound) error {
 			head.SeqID = remoteSeq
 		}
 		if item.targetNodeID != 0 {
+			head.DestNodeID = item.targetNodeID
 			head.RoutingMode = uint8(RoutingModeDirect)
 			head.RoutingKey = fmt.Sprintf("%d", item.targetNodeID)
 		}
@@ -259,7 +260,8 @@ func (m *Module) failOutbound(item peerOutbound, code errcode.ErrCode) {
 	head := item.head
 	head.SeqID = item.origSeqID
 	head.ErrCode = uint32(code)
-	head.FromNodeID = 0
+	head.SrcNodeID = 0
+	head.DestNodeID = item.head.SrcNodeID
 	_ = item.source.Send(Frame{Type: FrameRpcResponse, Header: EncodeRPCWireHeader(head)})
 }
 

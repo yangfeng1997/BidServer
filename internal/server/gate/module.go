@@ -251,7 +251,7 @@ func (m *Module) handleRemote(frame routeragent.Frame) {
 	if err != nil {
 		return
 	}
-	ctx := corerpc.Background().WithFromNode(head.FromNodeID).WithDeadline(time.Duration(head.DeadlineMs) * time.Millisecond)
+	ctx := corerpc.Background().WithFromNode(head.SrcNodeID).WithDeadline(time.Duration(head.DeadlineMs) * time.Millisecond)
 	var code errcode.ErrCode = errcode.OK
 	switch head.Route {
 	case "GateRemote/SendToClient":
@@ -279,8 +279,15 @@ func (m *Module) handleRemote(frame routeragent.Frame) {
 		code = errcode.ERR_NO_ROUTE
 	}
 	if frame.Type == routeragent.FrameRpcRequest && head.SeqID != 0 {
-		head.ErrCode = uint32(code)
-		_ = m.client.Send(routeragent.Frame{Type: routeragent.FrameRpcResponse, Header: routeragent.EncodeRPCWireHeader(head)})
+		rspHead := head
+		if rspHead.DestNodeID != 0 {
+			rspHead.SrcNodeID = rspHead.DestNodeID
+		} else if m.App().NodeIDUint32() != 0 {
+			rspHead.SrcNodeID = m.App().NodeIDUint32()
+		}
+		rspHead.DestNodeID = head.SrcNodeID
+		rspHead.ErrCode = uint32(code)
+		_ = m.client.Send(routeragent.Frame{Type: routeragent.FrameRpcResponse, Header: routeragent.EncodeRPCWireHeader(rspHead)})
 	}
 }
 

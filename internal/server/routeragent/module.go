@@ -256,8 +256,8 @@ func (m *Module) routeFrame(c *UDSConn, frame Frame) {
 
 	switch frame.Type {
 	case FrameRpcResponse:
-		if head.FromNodeID != 0 {
-			_ = m.sendToNode(head.FromNodeID, frame)
+		if head.DestNodeID != 0 {
+			_ = m.sendToNode(head.DestNodeID, frame)
 			return
 		}
 		entry := m.remoteSeq.Pop(head.SeqID)
@@ -265,7 +265,6 @@ func (m *Module) routeFrame(c *UDSConn, frame Frame) {
 			return
 		}
 		head.SeqID = entry.origSeqID
-		head.FromNodeID = 0
 		encoded := EncodeRPCWireHeader(head)
 		_ = entry.udsConn.Send(Frame{Type: FrameRpcResponse, Header: encoded, Body: frame.Body})
 	case FrameRpcRequest, FrameRpcNotify:
@@ -287,7 +286,10 @@ func (m *Module) forwardRPC(c *UDSConn, frame Frame, head RPCWireHeader) {
 			continue
 		}
 		if local := m.localConn(nodeID); local != nil {
-			_ = local.Send(frame)
+			out := frame
+			head.DestNodeID = nodeID
+			out.Header = EncodeRPCWireHeader(head)
+			_ = local.Send(out)
 			continue
 		}
 		_ = m.sendPeerOrQueue(info.RAAddr, peerOutbound{

@@ -97,15 +97,16 @@ func (m *Module) handleInbound(frame routeragent.Frame) {
 		if frame.Type != routeragent.FrameRpcRequest || head.SeqID == 0 {
 			return
 		}
-		rspHead := head
+		rspHead := responseHead(head, m.nodeID())
 		rspHead.ErrCode = uint32(errcode.CodeOf(err))
 		_ = m.client.Send(routeragent.Frame{Type: routeragent.FrameRpcResponse, Header: routeragent.EncodeRPCWireHeader(rspHead), Body: payload})
 	}); err != nil {
 		code = errcode.CodeOf(err)
 	}
 	if frame.Type == routeragent.FrameRpcRequest && head.SeqID != 0 && code != errcode.OK {
-		head.ErrCode = uint32(code)
-		_ = m.client.Send(routeragent.Frame{Type: routeragent.FrameRpcResponse, Header: routeragent.EncodeRPCWireHeader(head)})
+		rspHead := responseHead(head, m.nodeID())
+		rspHead.ErrCode = uint32(code)
+		_ = m.client.Send(routeragent.Frame{Type: routeragent.FrameRpcResponse, Header: routeragent.EncodeRPCWireHeader(rspHead)})
 	}
 }
 
@@ -133,13 +134,15 @@ func (m *Module) dispatchRoute(head routeragent.RPCWireHeader, body []byte, repl
 		}
 		logger.Info("ping lobby receive from gate",
 			logger.Uint64("rpc_seq", head.SeqID),
-			logger.Uint32("from_node", head.FromNodeID),
+			logger.Uint32("src_node", head.SrcNodeID),
+			logger.Uint32("dest_node", head.DestNodeID),
 			logger.String("route", head.Route),
 			logger.String("text", req.GetText()))
 		m.handler.Ping(ctx, &req, replyHandler[*handlerpb.SC_Tong_Rsp](func(payload []byte, err error) {
 			logger.Info("tong lobby send to gate",
 				logger.Uint64("rpc_seq", head.SeqID),
-				logger.Uint32("from_node", head.FromNodeID),
+				logger.Uint32("src_node", head.SrcNodeID),
+				logger.Uint32("dest_node", head.DestNodeID),
 				logger.String("route", head.Route),
 				logger.Uint32("err_code", uint32(errcode.CodeOf(err))),
 				logger.Int("payload_len", len(payload)))
@@ -149,6 +152,24 @@ func (m *Module) dispatchRoute(head routeragent.RPCWireHeader, body []byte, repl
 	default:
 		return errcode.New(errcode.ERR_NO_ROUTE, "route not found: "+head.Route)
 	}
+}
+
+func (m *Module) nodeID() uint32 {
+	if m.App() == nil {
+		return 0
+	}
+	return m.App().NodeIDUint32()
+}
+
+func responseHead(req routeragent.RPCWireHeader, localNodeID uint32) routeragent.RPCWireHeader {
+	rsp := req
+	if rsp.DestNodeID != 0 {
+		rsp.SrcNodeID = rsp.DestNodeID
+	} else if localNodeID != 0 {
+		rsp.SrcNodeID = localNodeID
+	}
+	rsp.DestNodeID = req.SrcNodeID
+	return rsp
 }
 
 func replyHandler[T proto.Message](reply func([]byte, error)) corerpc.Reply[T] {
@@ -174,7 +195,7 @@ func replyHandler[T proto.Message](reply func([]byte, error)) corerpc.Reply[T] {
 }
 
 func inboundCtx(head routeragent.RPCWireHeader) corerpc.Ctx {
-	ctx := corerpc.Background().WithFromNode(head.FromNodeID)
+	ctx := corerpc.Background().WithFromNode(head.SrcNodeID)
 	if head.DeadlineMs > 0 {
 		ctx = ctx.WithDeadline(time.Duration(head.DeadlineMs) * time.Millisecond)
 	}

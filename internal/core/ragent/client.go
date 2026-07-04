@@ -93,17 +93,19 @@ func (c *Client) SendFrame(target corerpc.Target, header corerpc.Header, body []
 		RoutingMode: routingModeToWire(target.Mode),
 		DeadlineMs:  header.DeadlineMs,
 		WaiterID:    header.WaiterID,
-		FromNodeID:  header.FromNodeID,
+		SrcNodeID:   header.SrcNodeID,
+		DestNodeID:  header.DestNodeID,
 		RoutingKey:  header.RoutingKey,
 		Route:       header.Route,
 	}
 	if wire.ServerType == 0 {
 		wire.ServerType = target.ServerType
 	}
-	if wire.FromNodeID == 0 {
-		wire.FromNodeID = c.nodeID
+	if wire.SrcNodeID == 0 {
+		wire.SrcNodeID = c.nodeID
 	}
 	if target.Mode == corerpc.RoutingDirect {
+		wire.DestNodeID = target.NodeID
 		wire.RoutingKey = strconv.FormatUint(uint64(target.NodeID), 10)
 	}
 	frameType := routeragent.FrameRpcNotify

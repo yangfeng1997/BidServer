@@ -59,7 +59,7 @@ func TestRouteFrameUsesRegisteredLocalConn(t *testing.T) {
 	}
 }
 
-func TestPeerRequestPreservesFromNodeAndRoutesByTargetKey(t *testing.T) {
+func TestPeerRequestStampsSrcDestAndRoutesDirect(t *testing.T) {
 	m := NewModule()
 	source := &UDSConn{remoteAddr: "unix://gate", done: make(chan struct{}), sendCh: make(chan Frame, 1), recvCh: make(chan Frame, 1)}
 	link := &UDSConn{remoteAddr: "peer", done: make(chan struct{}), sendCh: make(chan Frame, 1), recvCh: make(chan Frame, 1)}
@@ -67,7 +67,7 @@ func TestPeerRequestPreservesFromNodeAndRoutesByTargetKey(t *testing.T) {
 		SeqID:       7,
 		ServerType:  2,
 		RoutingMode: uint8(RoutingModeHash),
-		FromNodeID:  0x01010101,
+		SrcNodeID:   0x01010101,
 		RoutingKey:  "client-1",
 		Route:       "LobbyHandler/Ping",
 	}
@@ -90,8 +90,11 @@ func TestPeerRequestPreservesFromNodeAndRoutesByTargetKey(t *testing.T) {
 		if err != nil {
 			t.Fatalf("decode forwarded head: %v", err)
 		}
-		if gotHead.FromNodeID != head.FromNodeID {
-			t.Fatalf("from_node=%d, want %d", gotHead.FromNodeID, head.FromNodeID)
+		if gotHead.SrcNodeID != head.SrcNodeID {
+			t.Fatalf("src_node=%d, want %d", gotHead.SrcNodeID, head.SrcNodeID)
+		}
+		if gotHead.DestNodeID != 0x01020202 {
+			t.Fatalf("dest_node=%d, want %d", gotHead.DestNodeID, uint32(0x01020202))
 		}
 		if gotHead.RoutingMode != uint8(RoutingModeDirect) || gotHead.RoutingKey != "16908802" {
 			t.Fatalf("route mode/key=%d/%q, want direct target", gotHead.RoutingMode, gotHead.RoutingKey)
@@ -110,13 +113,13 @@ func TestPeerRequestPreservesFromNodeAndRoutesByTargetKey(t *testing.T) {
 	}
 }
 
-func TestHandlePeerFrameRequestRoutesByRoutingKey(t *testing.T) {
+func TestHandlePeerFrameRequestRoutesByDestNode(t *testing.T) {
 	m := NewModule()
 	targetNodeID := uint32(0x01020202)
 	fromNodeID := uint32(0x01010101)
 	local := &UDSConn{remoteAddr: "unix://lobby", done: make(chan struct{}), sendCh: make(chan Frame, 1), recvCh: make(chan Frame, 1)}
 	m.RegisterConn(targetNodeID, local)
-	head := RPCWireHeader{SeqID: 3, ServerType: 2, RoutingMode: uint8(RoutingModeDirect), FromNodeID: fromNodeID, RoutingKey: "16908802", Route: "LobbyHandler/Ping"}
+	head := RPCWireHeader{SeqID: 3, ServerType: 2, RoutingMode: uint8(RoutingModeDirect), SrcNodeID: fromNodeID, DestNodeID: targetNodeID, RoutingKey: "stale-key", Route: "LobbyHandler/Ping"}
 
 	m.handlePeerFrame(Frame{Type: FrameRpcRequest, Header: EncodeRPCWireHeader(head), Body: []byte("hi")})
 
@@ -126,8 +129,8 @@ func TestHandlePeerFrameRequestRoutesByRoutingKey(t *testing.T) {
 		if err != nil {
 			t.Fatalf("decode local head: %v", err)
 		}
-		if gotHead.FromNodeID != fromNodeID {
-			t.Fatalf("from_node=%d, want %d", gotHead.FromNodeID, fromNodeID)
+		if gotHead.SrcNodeID != fromNodeID || gotHead.DestNodeID != targetNodeID {
+			t.Fatalf("src/dest=%d/%d, want %d/%d", gotHead.SrcNodeID, gotHead.DestNodeID, fromNodeID, targetNodeID)
 		}
 		if string(got.Body) != "hi" {
 			t.Fatalf("body=%q, want hi", string(got.Body))
@@ -140,7 +143,7 @@ func TestHandlePeerFrameRequestRoutesByRoutingKey(t *testing.T) {
 func TestRouteMissReturnsErrorForPeerRequest(t *testing.T) {
 	m := NewModule()
 	source := &UDSConn{remoteAddr: "unix://gate", done: make(chan struct{}), sendCh: make(chan Frame, 1), recvCh: make(chan Frame, 1)}
-	head := RPCWireHeader{SeqID: 9, ServerType: 2, RoutingMode: uint8(RoutingModeDirect), FromNodeID: 0x01010101, RoutingKey: "16908802", Route: "LobbyHandler/Ping"}
+	head := RPCWireHeader{SeqID: 9, ServerType: 2, RoutingMode: uint8(RoutingModeDirect), SrcNodeID: 0x01010101, RoutingKey: "16908802", Route: "LobbyHandler/Ping"}
 
 	m.handlePeerFrame(Frame{Type: FrameRpcRequest, Header: EncodeRPCWireHeader(head), Body: []byte("hi")})
 
@@ -154,9 +157,34 @@ func TestRouteMissReturnsErrorForPeerRequest(t *testing.T) {
 	}
 }
 
+func TestPeerResponseMapsRemoteSeqBackToCaller(t *testing.T) {
+	m := NewModule()
+	source := &UDSConn{remoteAddr: "unix://gate", done: make(chan struct{}), sendCh: make(chan Frame, 1), recvCh: make(chan Frame, 1)}
+	remoteSeq := m.RemoteSeqMap().Alloc(source, 11)
+	head := RPCWireHeader{SeqID: remoteSeq, SrcNodeID: 0x01020202, DestNodeID: 0x01010101, ErrCode: uint32(errcode.OK), Route: "LobbyHandler/Ping"}
+
+	m.handlePeerFrame(Frame{Type: FrameRpcResponse, Header: EncodeRPCWireHeader(head), Body: []byte("tong")})
+
+	select {
+	case got := <-source.sendCh:
+		gotHead, err := DecodeRPCWireHeader(got.Header)
+		if err != nil {
+			t.Fatalf("decode response head: %v", err)
+		}
+		if gotHead.SeqID != 11 || gotHead.SrcNodeID != 0x01020202 || gotHead.DestNodeID != 0x01010101 || errcode.ErrCode(gotHead.ErrCode) != errcode.OK {
+			t.Fatalf("unexpected response head: %+v", gotHead)
+		}
+		if string(got.Body) != "tong" {
+			t.Fatalf("body=%q, want tong", string(got.Body))
+		}
+	default:
+		t.Fatal("expected peer response to be sent to original UDS conn")
+	}
+}
+
 func TestFailOutboundSendsOriginalSeqError(t *testing.T) {
 	source := &UDSConn{remoteAddr: "unix://gate", done: make(chan struct{}), sendCh: make(chan Frame, 1), recvCh: make(chan Frame, 1)}
-	head := RPCWireHeader{SeqID: 11, FromNodeID: 0x01010101, Route: "LobbyHandler/Ping"}
+	head := RPCWireHeader{SeqID: 11, SrcNodeID: 0x01010101, Route: "LobbyHandler/Ping"}
 	m := NewModule()
 
 	m.failOutbound(peerOutbound{source: source, frame: Frame{Type: FrameRpcRequest}, head: head, origSeqID: head.SeqID}, errcode.ERR_INTERNAL)
@@ -167,7 +195,7 @@ func TestFailOutboundSendsOriginalSeqError(t *testing.T) {
 		if err != nil {
 			t.Fatalf("decode error response head: %v", err)
 		}
-		if gotHead.SeqID != head.SeqID || gotHead.FromNodeID != 0 || errcode.ErrCode(gotHead.ErrCode) != errcode.ERR_INTERNAL {
+		if gotHead.SeqID != head.SeqID || gotHead.SrcNodeID != 0 || gotHead.DestNodeID != head.SrcNodeID || errcode.ErrCode(gotHead.ErrCode) != errcode.ERR_INTERNAL {
 			t.Fatalf("unexpected error head: %+v", gotHead)
 		}
 	default:

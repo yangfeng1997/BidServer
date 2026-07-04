@@ -29,7 +29,8 @@ func (t frameTransport) SendFrame(target corerpc.Target, header corerpc.Header, 
 		ServerType:  header.ServerType,
 		RoutingMode: uint8(routeragent.RoutingModeHash),
 		DeadlineMs:  header.DeadlineMs,
-		FromNodeID:  header.FromNodeID,
+		SrcNodeID:   header.SrcNodeID,
+		DestNodeID:  header.DestNodeID,
 		RoutingKey:  header.RoutingKey,
 		Route:       header.Route,
 	}
@@ -37,6 +38,7 @@ func (t frameTransport) SendFrame(target corerpc.Target, header corerpc.Header, 
 		wire.RoutingMode = uint8(routeragent.RoutingModeDirect)
 		wire.RoutingKey = ""
 		if target.NodeID != 0 {
+			wire.DestNodeID = target.NodeID
 			wire.RoutingKey = u32toa(target.NodeID)
 		}
 	}

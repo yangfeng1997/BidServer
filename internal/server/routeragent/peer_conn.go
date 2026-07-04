@@ -95,10 +95,14 @@ func (m *Module) handlePeerFrame(f Frame) {
 		if err != nil {
 			return
 		}
-		nodeID, err := parseNodeIDKey(head.RoutingKey)
-		if err != nil {
-			m.metrics.RouteMiss.Add(1)
-			return
+		nodeID := head.DestNodeID
+		if nodeID == 0 {
+			parsed, err := parseNodeIDKey(head.RoutingKey)
+			if err != nil {
+				m.metrics.RouteMiss.Add(1)
+				return
+			}
+			nodeID = parsed
 		}
 		m.deliverToLocal(nodeID, f)
 	}

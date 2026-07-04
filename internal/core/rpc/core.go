@@ -89,7 +89,7 @@ func (c *Core) Call(t Target, route string, body []byte, ctx Ctx, on func([]byte
 		SeqID:       seq,
 		Route:       route,
 		DeadlineMs:  int64(reqTimeout / time.Millisecond),
-		FromNodeID:  ctx.FromNodeID(),
+		SrcNodeID:   ctx.FromNodeID(),
 		RoutingMode: t.Mode,
 		RoutingKey:  t.Key,
 		ServerType:  t.ServerType,
@@ -101,7 +101,7 @@ func (c *Core) Call(t Target, route string, body []byte, ctx Ctx, on func([]byte
 func (c *Core) Send(t Target, route string, body []byte, ctx Ctx) {
 	head := Header{
 		Route:       route,
-		FromNodeID:  ctx.FromNodeID(),
+		SrcNodeID:   ctx.FromNodeID(),
 		RoutingMode: t.Mode,
 		RoutingKey:  t.Key,
 		ServerType:  t.ServerType,

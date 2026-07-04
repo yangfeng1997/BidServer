@@ -53,7 +53,8 @@ type Header struct {
 	Route       string
 	DeadlineMs  int64
 	WaiterID    uint64
-	FromNodeID  uint32
+	SrcNodeID   uint32
+	DestNodeID  uint32
 	ServerType  uint32
 	RoutingMode RoutingMode
 	RoutingKey  string

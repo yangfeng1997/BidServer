@@ -13,7 +13,8 @@ type RPCWireHeader struct {
 	RoutingMode uint8
 	DeadlineMs  int64
 	WaiterID    uint64
-	FromNodeID  uint32
+	SrcNodeID   uint32
+	DestNodeID  uint32
 	ErrCode     uint32
 	RoutingKey  string
 	Route       string
@@ -23,7 +24,7 @@ type RPCWireHeader struct {
 func EncodeRPCWireHeader(h RPCWireHeader) []byte {
 	keyLen := len(h.RoutingKey)
 	routeLen := len(h.Route)
-	out := make([]byte, 8+4+1+8+8+4+4+2+keyLen+2+routeLen)
+	out := make([]byte, 8+4+1+8+8+4+4+4+2+keyLen+2+routeLen)
 	pos := 0
 	binary.BigEndian.PutUint64(out[pos:pos+8], h.SeqID)
 	pos += 8
@@ -35,7 +36,9 @@ func EncodeRPCWireHeader(h RPCWireHeader) []byte {
 	pos += 8
 	binary.BigEndian.PutUint64(out[pos:pos+8], h.WaiterID)
 	pos += 8
-	binary.BigEndian.PutUint32(out[pos:pos+4], h.FromNodeID)
+	binary.BigEndian.PutUint32(out[pos:pos+4], h.SrcNodeID)
+	pos += 4
+	binary.BigEndian.PutUint32(out[pos:pos+4], h.DestNodeID)
 	pos += 4
 	binary.BigEndian.PutUint32(out[pos:pos+4], h.ErrCode)
 	pos += 4
@@ -51,7 +54,7 @@ func EncodeRPCWireHeader(h RPCWireHeader) []byte {
 
 // 解码字节切片为头部
 func DecodeRPCWireHeader(data []byte) (RPCWireHeader, error) {
-	if len(data) < 8+4+1+8+8+4+4+2+2 {
+	if len(data) < 8+4+1+8+8+4+4+4+2+2 {
 		return RPCWireHeader{}, fmt.Errorf("rpc header too short")
 	}
 	pos := 0
@@ -66,7 +69,9 @@ func DecodeRPCWireHeader(data []byte) (RPCWireHeader, error) {
 	pos += 8
 	h.WaiterID = binary.BigEndian.Uint64(data[pos : pos+8])
 	pos += 8
-	h.FromNodeID = binary.BigEndian.Uint32(data[pos : pos+4])
+	h.SrcNodeID = binary.BigEndian.Uint32(data[pos : pos+4])
+	pos += 4
+	h.DestNodeID = binary.BigEndian.Uint32(data[pos : pos+4])
 	pos += 4
 	h.ErrCode = binary.BigEndian.Uint32(data[pos : pos+4])
 	pos += 4

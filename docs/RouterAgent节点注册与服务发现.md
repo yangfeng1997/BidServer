@@ -229,11 +229,12 @@ etcd 中：
 3. RouterAgent A 查本地 `MemberTable`：`99.2.0 -> 10.0.0.2:7100`。
 4. RouterAgent A 如果还没有到 `10.0.0.2:7100` 的 TCP peer，就懒连接 RouterAgent B。
 5. RouterAgent A 为 request 分配 remote seq，记录原始 UDS 连接和原始 seq。
-6. RouterAgent A 把 frame 改写为 direct target：`RoutingKey = 99.2.0`，但保留 `FromNodeID = 99.1.0`。
+6. RouterAgent A 设置 envelope：`SrcNodeID = 99.1.0`，`DestNodeID = 99.2.0`，并把 `RoutingKey` 改写为 direct target 兼容信息。
 7. RouterAgent A 把 frame 通过 TCP 发给 RouterAgent B。
-8. RouterAgent B 按 `RoutingKey` 查本地 UDS 连接表：`99.2.0 -> UDSConn`。
-9. RouterAgent B 投递给本机 lobbysvr；`FromNodeID` 继续表示调用方，不用于本地投递。
-10. 如果是 request，回包沿 remote seq 映射返回调用方。
+8. RouterAgent B 按 `DestNodeID` 查本地 UDS 连接表：`99.2.0 -> UDSConn`。
+9. RouterAgent B 投递给本机 lobbysvr。
+10. lobbysvr 回包时交换端点：`SrcNodeID = 99.2.0`，`DestNodeID = 99.1.0`。
+11. 回包沿 remote seq 映射返回调用方。
 
 ## 路由模式与节点表关系
 
@@ -301,7 +302,7 @@ RouterAgent 之间通过 TCP peer 连接转发跨机 RPC。peer 握手时双方�
 
 ### 发送链路与 pending queue
 
-跨 RouterAgent 的 request/notify 必须区分来源和目标：`FromNodeID` 始终是原始调用方节点，`RoutingModeDirect + RoutingKey` 才表示远端 RouterAgent 需要投递的目标业务 NodeID。发送方可以把跨机 frame 改写成 direct target，但不能把 `FromNodeID` 改成目标节点，否则回包会丢失原始调用方语义并导致 RPC 超时。
+跨 RouterAgent 的 request/notify 必须区分来源和目标：`SrcNodeID` 表示当前消息来源节点，`DestNodeID` 表示当前消息目的节点。request 中 `SrcNodeID=调用方`、`DestNodeID=处理方`；response 中二者交换。远端 RouterAgent 优先按 `DestNodeID` 投递本地业务连接，response 仍通过 remote seq 精确关联原请求。
 
 主路由路径不在主循环里同步拨号，而是走 `sendPeerOrQueue`：
 
@@ -347,7 +348,7 @@ GameServer 当前源码中服务发现骨架存在，但代业务节点注册到
 - Etcd 中 `node_id` 使用可读字符串。
 - RouterAgent 可 watch etcd 并更新 `MemberTable`。
 - RouterAgent 使用配置中的 `routeragent_listen_addr` 作为跨 RA TCP 地址。
-- 跨 RouterAgent 转发时保留原始 `FromNodeID`，并使用 direct `RoutingKey` 指定远端本地投递目标。
+- 跨 RouterAgent 转发使用 `SrcNodeID` / `DestNodeID` 表示消息端点，远端本地投递优先按 `DestNodeID`。
 - RouterAgent peer 连接按远端 `listenAddr` 建立 active link，重复连接会替换旧连接并主动关闭旧 link。
 - 主路由路径走 `sendPeerOrQueue`：已连接直接非阻塞发送，未连接/连接中进入 per-peer bounded pending queue（上限 8192），异步建连成功后 flush，失败或队列满时 request 立即回 `ERR_INTERNAL`。
 - 拨号和握手受 `peerDialTimeout = 3s` deadline 约束，不会阻塞 RouterAgent 主循环。
@@ -356,3 +357,12 @@ GameServer 当前源码中服务发现骨架存在，但代业务节点注册到
 
 - 对重复 NodeID、非法 serverType 的握手校验。
 - 生产环境中 `routeragent_listen_addr` 的可达性验证。
+
+锦上添花（非必须，后续可做）：
+
+- **wire header version**：当前 RPC wire header 新旧进程不能混跑；后续可加版本号，支持协议升级时灰度兼容。
+- **更完整的握手强校验**：补齐重复业务 `nodeID`、非法 `serverType`、普通业务进程冒充 `ST_ROUTERAGENT` 等校验。
+- **pending 水位 metrics**：暴露每个 peer 的 pending 长度，方便监控告警。
+- **peer 主动健康检查**：当前靠 read/write 失败被动发现断连，可加主动心跳。
+- **分级队列**：response 单独队列，避免被 notify/request 挤掉；当前对游戏/集群通信场景够用。
+- **trace id / span id**：如后续需要全链路追踪，可在 RPC envelope 或业务 metadata 中增加 trace 字段。
