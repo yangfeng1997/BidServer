@@ -297,6 +297,26 @@ RouterAgent 之间通过 TCP peer 连接转发跨机 RPC。peer 握手时双方�
 
 双边同时建连时，最终也会收敛为每个远端 RouterAgent 一条 active link。
 
+### 发送链路与 pending queue
+
+主路由路径不在主循环里同步拨号，而是走 `sendPeerOrQueue`：
+
+- 已连接且 link 可用：非阻塞发送。
+- 未连接 / 连接中：进入该 peer 的 pending 队列。
+- 首个入队者触发异步 dial，其他请求只入队。
+- 队列满时按消息类型 fail fast：request 立即回 `ERR_INTERNAL`，notify 丢弃，response 丢弃由调用方超时兜底。
+- dial 成功后 flush pending；dial 失败后 pending 中的 request 立即回错。
+
+关键参数：
+
+- `peerDialTimeout = 3s`：TCP 拨号和握手读写的 deadline。
+- `peerPendingLimit = 8192`：单 peer pending 队列上限，同 VPC 5万 QPS 下覆盖约 160ms 抖动窗口。
+- `tcpPeerLink.Send` 非阻塞，send channel 满直接返回错误，不阻塞 RouterAgent 主循环。
+
+### 状态机
+
+每个远端 `listenAddr` 维护 `Disconnected / Connecting / Connected` 状态。只有 `Connected` 且 `Link != nil` 时直接发送，否则入队并按需触发异步建连。
+
 ## 与 GameServer 参考实现的关系
 
 GameServer 的设计文档同样采用 sidecar 模型：
@@ -324,6 +344,8 @@ GameServer 当前源码中服务发现骨架存在，但代业务节点注册到
 - RouterAgent 可 watch etcd 并更新 `MemberTable`。
 - RouterAgent 使用配置中的 `routeragent_listen_addr` 作为跨 RA TCP 地址。
 - RouterAgent peer 连接按远端 `listenAddr` 建立 active link，重复连接会替换旧连接并主动关闭旧 link。
+- 主路由路径走 `sendPeerOrQueue`：已连接直接非阻塞发送，未连接/连接中进入 per-peer bounded pending queue（上限 8192），异步建连成功后 flush，失败或队列满时 request 立即回 `ERR_INTERNAL`。
+- 拨号和握手受 `peerDialTimeout = 3s` deadline 约束，不会阻塞 RouterAgent 主循环。
 
 仍需继续收口或验证：
 

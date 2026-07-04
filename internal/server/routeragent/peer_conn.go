@@ -2,6 +2,7 @@ package routeragent
 
 import (
 	"encoding/binary"
+	"errors"
 	"io"
 	"net"
 	"sync"
@@ -49,25 +50,22 @@ func (m *Module) handleIncomingPeer(conn net.Conn, listenAddr string) {
 
 	// 包装为 PeerLink。若双边同时建连，新连接会替换旧连接并主动关闭旧连接，避免残留双连接。
 	pl := &tcpPeerLink{conn: conn, addr: peerListenAddr, sendCh: make(chan Frame, 64), done: make(chan struct{})}
-	old, replaced := m.peerMgr.Attach(peerListenAddr, pl, "incoming")
+	old, replaced, pending := m.peerMgr.Attach(peerListenAddr, pl, "incoming")
 	if replaced {
 		logger.Warn("routeragent peer replaced old connection", logger.String("direction", "incoming"), logger.String("peer_listen_addr", peerListenAddr), logger.String("listen_addr", listenAddr))
 		m.metrics.PeerDisconnectTotal.Add(1)
 		_ = old.Close()
 	}
 	m.metrics.PeerConnectTotal.Add(1)
-	logger.Info("routeragent peer connected", logger.String("direction", "incoming"), logger.String("remote_addr", addr), logger.String("peer_listen_addr", peerListenAddr), logger.String("listen_addr", listenAddr))
+	logger.Info("routeragent peer connected", logger.String("direction", "incoming"), logger.String("remote_addr", addr), logger.String("peer_listen_addr", peerListenAddr), logger.String("listen_addr", listenAddr), logger.Int("pending", len(pending)))
+	m.flushPeerPending(pl, pending)
 
-	// 读写循环
-	writeDone := make(chan struct{})
-	go pl.writeLoop(writeDone)
 	pl.readLoop(func(f Frame) {
-		m.poster.Post(func() {
+		m.post(func() {
 			m.handlePeerFrame(f)
 		})
 	})
 
-	close(writeDone)
 	if m.peerMgr.Detach(peerListenAddr, pl) {
 		m.metrics.PeerDisconnectTotal.Add(1)
 		logger.Warn("routeragent peer disconnected", logger.String("direction", "incoming"), logger.String("peer_listen_addr", peerListenAddr), logger.String("remote_addr", addr))
@@ -127,6 +125,8 @@ func (l *tcpPeerLink) Send(f Frame) error {
 		return io.EOF
 	case l.sendCh <- f:
 		return nil
+	default:
+		return errors.New("peer send queue full")
 	}
 }
 

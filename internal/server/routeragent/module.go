@@ -290,25 +290,14 @@ func (m *Module) forwardRPC(c *UDSConn, frame Frame, head RPCWireHeader) {
 			_ = local.Send(frame)
 			continue
 		}
-		peer := m.peerMgr.Get(info.RAAddr)
-		if peer == nil || peer.Link == nil {
-			if err := m.DialPeer(info.RAAddr); err != nil {
-				continue
-			}
-			peer = m.peerMgr.Get(info.RAAddr)
-		}
-		if peer == nil || peer.Link == nil {
-			continue
-		}
-		remoteSeq := m.remoteSeq.Alloc(c, origSeqID)
-		head.SeqID = remoteSeq
-		head.FromNodeID = nodeID
-		if frame.Type == FrameRpcRequest {
-			head.RoutingMode = uint8(RoutingModeDirect)
-			head.RoutingKey = fmt.Sprintf("%d", nodeID)
-		}
-		encoded := EncodeRPCWireHeader(head)
-		_ = peer.Link.Send(Frame{Type: frame.Type, Header: encoded, Body: frame.Body})
+		_ = m.sendPeerOrQueue(info.RAAddr, peerOutbound{
+			source:       c,
+			frame:        frame,
+			head:         head,
+			origSeqID:    origSeqID,
+			targetNodeID: nodeID,
+			prepareRPC:   true,
+		})
 	}
 }
 
@@ -358,17 +347,7 @@ func (m *Module) routeLegacyFrame(c *UDSConn, frame Frame) {
 		_ = local.Send(frame)
 		return
 	}
-	peer := m.peerMgr.Get(info.RAAddr)
-	if peer == nil || peer.Link == nil {
-		if err := m.DialPeer(info.RAAddr); err != nil {
-			return
-		}
-		peer = m.peerMgr.Get(info.RAAddr)
-	}
-	if peer == nil || peer.Link == nil {
-		return
-	}
-	_ = peer.Link.Send(Frame{Type: frame.Type, Body: EncodeRouteBody(nodeID, payload)})
+	_ = m.sendPeerOrQueue(info.RAAddr, peerOutbound{frame: Frame{Type: frame.Type, Body: EncodeRouteBody(nodeID, payload)}})
 }
 
 func (m *Module) sendToNode(nodeID uint32, frame Frame) error {
@@ -379,17 +358,7 @@ func (m *Module) sendToNode(nodeID uint32, frame Frame) error {
 	if !ok {
 		return errors.New("node not found")
 	}
-	peer := m.peerMgr.Get(info.RAAddr)
-	if peer == nil || peer.Link == nil {
-		if err := m.DialPeer(info.RAAddr); err != nil {
-			return err
-		}
-		peer = m.peerMgr.Get(info.RAAddr)
-	}
-	if peer == nil || peer.Link == nil {
-		return errors.New("peer not connected")
-	}
-	return peer.Link.Send(frame)
+	return m.sendPeerOrQueue(info.RAAddr, peerOutbound{frame: frame})
 }
 
 func (m *Module) registerConn(nodeID uint32, c *UDSConn) {
