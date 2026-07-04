@@ -6,36 +6,50 @@ import (
 	"net"
 	"sync"
 	"time"
+
+	"project/pkg/logger"
 )
 
 // handleIncomingPeer 处理远端 RA 的入站 TCP 连接
 func (m *Module) handleIncomingPeer(conn net.Conn, listenAddr string) {
 	addr := conn.RemoteAddr().String()
+	logger.Info("routeragent peer incoming accepted", logger.String("remote_addr", addr), logger.String("listen_addr", listenAddr))
 	defer conn.Close()
 
 	// 接收对端 Handshake（包含对端 listen address）
 	buf := make([]byte, 2)
+	logger.Info("routeragent peer incoming handshake receive start", logger.String("remote_addr", addr))
 	if _, err := io.ReadFull(conn, buf); err != nil {
+		logger.Error("routeragent peer incoming handshake receive header failed", logger.String("remote_addr", addr), logger.Err(err))
 		return
 	}
 	addrLen := int(binary.BigEndian.Uint16(buf))
 	if addrLen > 256 || addrLen <= 0 {
+		logger.Warn("routeragent peer incoming handshake invalid addr length", logger.String("remote_addr", addr), logger.Int("addr_len", addrLen))
 		return
 	}
 	peerAddr := make([]byte, addrLen)
 	if _, err := io.ReadFull(conn, peerAddr); err != nil {
+		logger.Error("routeragent peer incoming handshake receive addr failed", logger.String("remote_addr", addr), logger.Int("addr_len", addrLen), logger.Err(err))
 		return
 	}
 	peerListenAddr := string(peerAddr)
+	logger.Info("routeragent peer incoming handshake receive done", logger.String("remote_addr", addr), logger.String("peer_listen_addr", peerListenAddr), logger.String("listen_addr", listenAddr))
 
 	// 发送本端 Handshake
 	hsBuf := make([]byte, 2+len(listenAddr))
 	binary.BigEndian.PutUint16(hsBuf[:2], uint16(len(listenAddr)))
 	copy(hsBuf[2:], listenAddr)
-	conn.Write(hsBuf)
+	logger.Info("routeragent peer incoming handshake send", logger.String("remote_addr", addr), logger.String("listen_addr", listenAddr))
+	if _, err := conn.Write(hsBuf); err != nil {
+		logger.Error("routeragent peer incoming handshake send failed", logger.String("remote_addr", addr), logger.String("listen_addr", listenAddr), logger.Err(err))
+		m.metrics.PeerConnectFailTotal.Add(1)
+		return
+	}
 
 	// 防双向重复建连：两边比较 listenAddr 字典序
 	if !m.DedupPeer(listenAddr, peerListenAddr, "incoming") {
+		logger.Warn("routeragent peer dedup rejected", logger.String("direction", "incoming"), logger.String("listen_addr", listenAddr), logger.String("peer_listen_addr", peerListenAddr))
 		m.metrics.PeerConnectFailTotal.Add(1)
 		return
 	}
@@ -44,8 +58,7 @@ func (m *Module) handleIncomingPeer(conn net.Conn, listenAddr string) {
 	pl := &tcpPeerLink{conn: conn, addr: peerListenAddr, sendCh: make(chan Frame, 64), done: make(chan struct{})}
 	m.peerMgr.Attach(peerListenAddr, pl)
 	m.metrics.PeerConnectTotal.Add(1)
-
-	_ = addr
+	logger.Info("routeragent peer connected", logger.String("direction", "incoming"), logger.String("remote_addr", addr), logger.String("peer_listen_addr", peerListenAddr), logger.String("listen_addr", listenAddr))
 
 	// 读写循环
 	writeDone := make(chan struct{})
@@ -59,6 +72,7 @@ func (m *Module) handleIncomingPeer(conn net.Conn, listenAddr string) {
 	close(writeDone)
 	m.peerMgr.Disconnect(peerListenAddr)
 	m.metrics.PeerDisconnectTotal.Add(1)
+	logger.Warn("routeragent peer disconnected", logger.String("direction", "incoming"), logger.String("peer_listen_addr", peerListenAddr), logger.String("remote_addr", addr))
 }
 
 // handlePeerFrame 处理从远端 peer 收到的帧

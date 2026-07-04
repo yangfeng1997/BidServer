@@ -6,6 +6,8 @@ import (
 	"io"
 	"net"
 	"sync"
+
+	"project/pkg/logger"
 )
 
 // PeerLink 表示一个可发送帧的 peer 连接
@@ -100,22 +102,28 @@ func (m *PeerMgr) List() []*PeerInfo {
 // 连接到远端 RA
 func (m *Module) DialPeer(addr string) error {
 	if addr == "" {
+		logger.Warn("routeragent peer dial skipped: empty addr")
 		return nil
 	}
+	listenAddr := m.peerMgr.listenAddr
+	logger.Info("routeragent peer dial start", logger.String("peer_addr", addr), logger.String("listen_addr", listenAddr))
 	m.peerMgr.SetState(addr, PeerConnecting)
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
+		logger.Error("routeragent peer dial failed", logger.String("peer_addr", addr), logger.String("listen_addr", listenAddr), logger.Err(err))
 		m.peerMgr.SetState(addr, PeerDisconnected)
 		m.metrics.PeerConnectFailTotal.Add(1)
 		return err
 	}
+	logger.Info("routeragent peer tcp connected", logger.String("peer_addr", addr), logger.String("local_addr", conn.LocalAddr().String()), logger.String("remote_addr", conn.RemoteAddr().String()))
 
 	// 发送握手指携带本地监听地址
-	listenAddr := m.peerMgr.listenAddr
 	hsBuf := make([]byte, 2+len(listenAddr))
 	binary.BigEndian.PutUint16(hsBuf[:2], uint16(len(listenAddr)))
 	copy(hsBuf[2:], listenAddr)
+	logger.Info("routeragent peer handshake send", logger.String("peer_addr", addr), logger.String("listen_addr", listenAddr))
 	if _, err := conn.Write(hsBuf); err != nil {
+		logger.Error("routeragent peer handshake send failed", logger.String("peer_addr", addr), logger.String("listen_addr", listenAddr), logger.Err(err))
 		conn.Close()
 		m.peerMgr.SetState(addr, PeerDisconnected)
 		m.metrics.PeerConnectFailTotal.Add(1)
@@ -124,7 +132,9 @@ func (m *Module) DialPeer(addr string) error {
 
 	// 接收对端 Handshake
 	buf := make([]byte, 2)
+	logger.Info("routeragent peer handshake receive start", logger.String("peer_addr", addr))
 	if _, err := io.ReadFull(conn, buf); err != nil {
+		logger.Error("routeragent peer handshake receive header failed", logger.String("peer_addr", addr), logger.Err(err))
 		conn.Close()
 		m.peerMgr.SetState(addr, PeerDisconnected)
 		m.metrics.PeerConnectFailTotal.Add(1)
@@ -132,21 +142,25 @@ func (m *Module) DialPeer(addr string) error {
 	}
 	peerAddrLen := int(binary.BigEndian.Uint16(buf))
 	if peerAddrLen > 256 || peerAddrLen <= 0 {
+		logger.Warn("routeragent peer handshake invalid addr length", logger.String("peer_addr", addr), logger.Int("addr_len", peerAddrLen))
 		conn.Close()
 		m.peerMgr.SetState(addr, PeerDisconnected)
 		return errors.New("invalid peer addr length")
 	}
 	peerAddrBuf := make([]byte, peerAddrLen)
 	if _, err := io.ReadFull(conn, peerAddrBuf); err != nil {
+		logger.Error("routeragent peer handshake receive addr failed", logger.String("peer_addr", addr), logger.Int("addr_len", peerAddrLen), logger.Err(err))
 		conn.Close()
 		m.peerMgr.SetState(addr, PeerDisconnected)
 		m.metrics.PeerConnectFailTotal.Add(1)
 		return err
 	}
 	peerListenAddr := string(peerAddrBuf)
+	logger.Info("routeragent peer handshake receive done", logger.String("peer_addr", addr), logger.String("peer_listen_addr", peerListenAddr), logger.String("listen_addr", listenAddr))
 
 	// 防双向重复建连
 	if !m.DedupPeer(listenAddr, peerListenAddr, "outgoing") {
+		logger.Warn("routeragent peer dedup rejected", logger.String("direction", "outgoing"), logger.String("listen_addr", listenAddr), logger.String("peer_listen_addr", peerListenAddr))
 		conn.Close()
 		m.peerMgr.SetState(addr, PeerDisconnected)
 		m.metrics.PeerConnectFailTotal.Add(1)
@@ -158,6 +172,7 @@ func (m *Module) DialPeer(addr string) error {
 	m.peerMgr.Attach(peerListenAddr, pl)
 	m.peerMgr.SetState(peerListenAddr, PeerConnected)
 	m.metrics.PeerConnectTotal.Add(1)
+	logger.Info("routeragent peer connected", logger.String("direction", "outgoing"), logger.String("peer_addr", addr), logger.String("peer_listen_addr", peerListenAddr), logger.String("listen_addr", listenAddr))
 
 	go func() {
 		writeDone := make(chan struct{})
@@ -170,6 +185,7 @@ func (m *Module) DialPeer(addr string) error {
 		close(writeDone)
 		m.peerMgr.Disconnect(peerListenAddr)
 		m.metrics.PeerDisconnectTotal.Add(1)
+		logger.Warn("routeragent peer disconnected", logger.String("direction", "outgoing"), logger.String("peer_listen_addr", peerListenAddr))
 	}()
 
 	return nil

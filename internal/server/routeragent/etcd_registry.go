@@ -59,22 +59,23 @@ func NewEtcdRegistry(endpoints []string, prefix string) (*EtcdRegistry, error) {
 	return &EtcdRegistry{cli: cli, prefix: prefix, stopCh: make(chan struct{})}, nil
 }
 
-// Register 注册本节点到 etcd
+// Register 注册本节点到 etcd。
+// RouterAgent 自身注册必须是 CAS：如果 nodeID 对应 key 已存在，说明有重复节点或旧 lease 未过期，直接报错。
 func (r *EtcdRegistry) Register(nodeID uint32, raAddr string, serverType uint32) error {
 	r.nodeID = nodeID
 	r.raAddr = raAddr
-	return r.PutNode(nodeID, raAddr, serverType)
+	return r.putNodeIfAbsent(nodeID, raAddr, serverType)
 }
 
-// PutNode 使用当前 lease 注册节点到 etcd
+// PutNode 使用当前 lease 注册节点到 etcd。
+// 业务节点由本机 RouterAgent 代注册，保持覆盖写入，避免业务进程重连时被自身旧值阻塞。
 func (r *EtcdRegistry) PutNode(nodeID uint32, raAddr string, serverType uint32) error {
 	lease, err := r.ensureLease()
 	if err != nil {
 		return err
 	}
 	key := r.nodeKey(nodeID)
-	info := nodeInfoJSON{NodeID: nodeid.String(nodeID), ServerType: serverType, RAAddr: raAddr, StartAt: time.Now().Unix()}
-	data, err := json.Marshal(info)
+	data, err := marshalNodeInfo(nodeID, raAddr, serverType)
 	if err != nil {
 		return err
 	}
@@ -82,6 +83,35 @@ func (r *EtcdRegistry) PutNode(nodeID uint32, raAddr string, serverType uint32) 
 		return fmt.Errorf("etcd put: %w", err)
 	}
 	return nil
+}
+
+func (r *EtcdRegistry) putNodeIfAbsent(nodeID uint32, raAddr string, serverType uint32) error {
+	lease, err := r.ensureLease()
+	if err != nil {
+		return err
+	}
+	key := r.nodeKey(nodeID)
+	data, err := marshalNodeInfo(nodeID, raAddr, serverType)
+	if err != nil {
+		return err
+	}
+	resp, err := r.cli.Txn(context.Background()).
+		If(clientv3.Compare(clientv3.Version(key), "=", 0)).
+		Then(clientv3.OpPut(key, string(data), clientv3.WithLease(lease))).
+		Else(clientv3.OpGet(key)).
+		Commit()
+	if err != nil {
+		return fmt.Errorf("etcd txn put-if-absent: %w", err)
+	}
+	if !resp.Succeeded {
+		return fmt.Errorf("etcd node already exists: key=%s node_id=%s", key, nodeid.String(nodeID))
+	}
+	return nil
+}
+
+func marshalNodeInfo(nodeID uint32, raAddr string, serverType uint32) ([]byte, error) {
+	info := nodeInfoJSON{NodeID: nodeid.String(nodeID), ServerType: serverType, RAAddr: raAddr, StartAt: time.Now().Unix()}
+	return json.Marshal(info)
 }
 
 // DeleteNode 删除节点注册

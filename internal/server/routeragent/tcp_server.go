@@ -4,6 +4,8 @@ import (
 	"errors"
 	"net"
 	"sync"
+
+	"project/pkg/logger"
 )
 
 // PeerHandler 处理远端 RA 连接
@@ -49,11 +51,14 @@ func (s *TCPServer) Serve(stopCh <-chan struct{}) {
 				return
 			default:
 			}
+			logger.Warn("routeragent tcp accept failed", logger.String("addr", s.addr), logger.Err(err))
 			continue
 		}
+		logger.Info("routeragent tcp accept peer", logger.String("addr", s.addr), logger.String("remote_addr", raw.RemoteAddr().String()))
 		if s.handler != nil {
 			go s.handler(raw, s.listenAddr)
 		} else {
+			logger.Warn("routeragent tcp peer closed: handler missing", logger.String("remote_addr", raw.RemoteAddr().String()))
 			raw.Close()
 		}
 	}
