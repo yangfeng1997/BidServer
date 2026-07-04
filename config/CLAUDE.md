@@ -25,6 +25,7 @@
 - [`common.yaml`](common.yaml)
 - [`gate.yaml`](gate.yaml)
 - [`lobby.yaml`](lobby.yaml)
+- [`routeragent.yaml`](routeragent.yaml)
 
 ## 快速读法
 

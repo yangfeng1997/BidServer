@@ -275,17 +275,14 @@ RouterAgent 处理业务握手时至少应校验：
 
 `ra_addr` 必须是其他 RouterAgent 能连接到的 TCP 地址。
 
-单机测试可以使用：
+当前实现从配置读取 `routeragent_listen_addr`。该地址必须是其他 RouterAgent 能连接到的 TCP 地址，并同时用于：
 
-```yaml
-routeragent_listen_addr: "127.0.0.1:7100"
-```
+- RouterAgent 自身 TCP 监听地址。
+- RouterAgent 自身 etcd 注册的 `ra_addr`。
+- RouterAgent 代业务节点注册到 etcd 时写入的 `ra_addr`。
+- 跨 RouterAgent 握手去重时使用的本机监听地址。
 
-跨机器部署不能使用 `127.0.0.1`，否则远端 RouterAgent 会连到它自己的本机地址。跨机器部署应使用内网 IP 或可解析域名：
-
-```yaml
-routeragent_listen_addr: "10.0.0.12:7100"
-```
+同一 VPC / 内网部署时建议配置内网 IP，例如 `10.0.0.8:7100`。跨公网或跨云部署时，应配置公网 IP、域名或 VPN / 专线内网地址，并确保安全组、防火墙放行该端口。
 
 ## 与 GameServer 参考实现的关系
 
@@ -308,13 +305,13 @@ GameServer 当前源码中服务发现骨架存在，但代业务节点注册到
 - 业务进程握手发送 4 字节 `uint32 nodeID`。
 - RouterAgent 收握手后本地注册 UDS 连接。
 - RouterAgent 自身注册到 etcd。
+- 业务节点握手成功后由 RouterAgent 写入 etcd。
+- 业务 UDS 断开时删除业务节点 key。
 - Etcd 中 `node_id` 使用可读字符串。
 - RouterAgent 可 watch etcd 并更新 `MemberTable`。
+- RouterAgent 使用配置中的 `routeragent_listen_addr` 作为跨 RA TCP 地址。
 
 仍需继续收口或验证：
 
-- 业务节点握手成功后由 RouterAgent 写入 etcd。
-- 业务 UDS 断开时删除业务节点 key。
-- `config/gen` 与 schema 中旧的服务私有 `node_id` 字段清理完成。
 - 对重复 NodeID、非法 serverType 的握手校验。
-- 跨机器部署时 `routeragent_listen_addr` 使用真实可达地址。
+- 生产环境中 `routeragent_listen_addr` 的可达性验证。

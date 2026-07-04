@@ -37,7 +37,6 @@ type GateConfig struct {
 }
 
 type LobbyConfig struct {
-	ListenAddr string `yaml:"listen_addr"`
 	MaxPlayer int32 `yaml:"max_player"`
 	HeartbeatSec int32 `yaml:"heartbeat_sec"`
 	RouteragentSockPath string `yaml:"routeragent_sock_path"`

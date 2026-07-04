@@ -100,9 +100,6 @@ func (cfg *LobbyConfig) Validate() error {
 	if cfg == nil {
 		return fmt.Errorf("config is nil")
 	}
-	if cfg.ListenAddr == "" {
-		return fmt.Errorf("listen_addr is required")
-	}
 	if cfg.MaxPlayer == 0 {
 		return fmt.Errorf("max_player is required")
 	}

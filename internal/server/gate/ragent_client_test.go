@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"project/internal/core/ragent"
 	"project/internal/server/routeragent"
 )
 
@@ -20,7 +21,7 @@ func TestRagentClientConnectsToRouterAgentUDS(t *testing.T) {
 	}
 	defer ra.BeforeShutdown()
 
-	client := NewRagentClient(0x01010101, sock, posterFunc(func(fn func()) { fn() }), nil)
+	client := ragent.NewClient(0x01010101, sock, posterFunc(func(fn func()) { fn() }), nil)
 	if err := client.Connect(); err != nil {
 		t.Fatalf("connect routeragent: %v", err)
 	}

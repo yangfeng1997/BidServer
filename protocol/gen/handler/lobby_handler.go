@@ -15,6 +15,7 @@ import (
 type LobbyHandler interface {
 	ClaimReward(ctx corerpc.Ctx, req *handler.CS_ClaimReward_Req, reply corerpc.Reply[*handler.SC_ClaimReward_Rsp])
 	SyncPos(ctx corerpc.Ctx, ntf *handler.CS_SyncPos_Ntf)
+	Ping(ctx corerpc.Ctx, req *handler.CS_Ping_Req, reply corerpc.Reply[*handler.SC_Tong_Rsp])
 }
 
 func RegisterLobbyHandler(d *dispatcher.Dispatcher, srv LobbyHandler) {
@@ -47,6 +48,27 @@ func RegisterLobbyHandler(d *dispatcher.Dispatcher, srv LobbyHandler) {
 		}
 		ctx := corerpc.Background()
 		srv.SyncPos(ctx, &ntf)
+		return nil
+	})
+	// LobbyHandler/Ping (Req/Rsp) cmd=2054 rsp=2055
+	d.RegisterHandler(2054, func(sess *session.Session, msg *codec.Message) error {
+		var req handler.CS_Ping_Req
+		if err := proto.Unmarshal(msg.Body, &req); err != nil {
+			return errcode.New(errcode.ERR_UNMARSHAL, err.Error())
+		}
+		ctx := corerpc.Background()
+		srv.Ping(ctx, &req, func(rsp *handler.SC_Tong_Rsp, err error) {
+			if err != nil || rsp == nil {
+				return
+			}
+			data, merr := proto.Marshal(rsp)
+			if merr != nil {
+				return
+			}
+			// reply writes back via ragent; path goes through rpc.Core
+			_ = sess
+			_ = data
+		})
 		return nil
 	})
 }

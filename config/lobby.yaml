@@ -1,6 +1,5 @@
 max_player: 5000
 heartbeat_sec: 30
-listen_addr: "${lobby_listen_addr}"
 routeragent_sock_path: "${routeragent_sock_path}"
 
 logger_group:

@@ -131,6 +131,94 @@ func (*CS_SyncPos_Ntf) Descriptor() ([]byte, []int) {
 	return file_protocol_handler_lobby_handler_proto_rawDescGZIP(), []int{2}
 }
 
+type CS_Ping_Req struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Text          string                 `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CS_Ping_Req) Reset() {
+	*x = CS_Ping_Req{}
+	mi := &file_protocol_handler_lobby_handler_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CS_Ping_Req) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CS_Ping_Req) ProtoMessage() {}
+
+func (x *CS_Ping_Req) ProtoReflect() protoreflect.Message {
+	mi := &file_protocol_handler_lobby_handler_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CS_Ping_Req.ProtoReflect.Descriptor instead.
+func (*CS_Ping_Req) Descriptor() ([]byte, []int) {
+	return file_protocol_handler_lobby_handler_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *CS_Ping_Req) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+type SC_Tong_Rsp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Text          string                 `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SC_Tong_Rsp) Reset() {
+	*x = SC_Tong_Rsp{}
+	mi := &file_protocol_handler_lobby_handler_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SC_Tong_Rsp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SC_Tong_Rsp) ProtoMessage() {}
+
+func (x *SC_Tong_Rsp) ProtoReflect() protoreflect.Message {
+	mi := &file_protocol_handler_lobby_handler_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SC_Tong_Rsp.ProtoReflect.Descriptor instead.
+func (*SC_Tong_Rsp) Descriptor() ([]byte, []int) {
+	return file_protocol_handler_lobby_handler_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *SC_Tong_Rsp) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
 var File_protocol_handler_lobby_handler_proto protoreflect.FileDescriptor
 
 const file_protocol_handler_lobby_handler_proto_rawDesc = "" +
@@ -138,10 +226,15 @@ const file_protocol_handler_lobby_handler_proto_rawDesc = "" +
 	"$protocol/handler/lobby_handler.proto\x12\x10protocol.handler\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1dprotocol/common/options.proto\"\x1b\n" +
 	"\x12CS_ClaimReward_Req:\x05\x98\xb5\x18\x82\x10\"\x1b\n" +
 	"\x12SC_ClaimReward_Rsp:\x05\x98\xb5\x18\x83\x10\"\x1b\n" +
-	"\x0eCS_SyncPos_Ntf:\t\x98\xb5\x18\x84\x10\xa0\xb5\x18\x012\xb8\x01\n" +
+	"\x0eCS_SyncPos_Ntf:\t\x98\xb5\x18\x84\x10\xa0\xb5\x18\x01\",\n" +
+	"\vCS_Ping_Req\x12\x12\n" +
+	"\x04text\x18\x01 \x01(\tR\x04text:\t\x98\xb5\x18\x86\x10\xa0\xb5\x18\x01\"(\n" +
+	"\vSC_Tong_Rsp\x12\x12\n" +
+	"\x04text\x18\x01 \x01(\tR\x04text:\x05\x98\xb5\x18\x87\x102\xfe\x01\n" +
 	"\fLobbyHandler\x12Y\n" +
 	"\vClaimReward\x12$.protocol.handler.CS_ClaimReward_Req\x1a$.protocol.handler.SC_ClaimReward_Rsp\x12C\n" +
-	"\aSyncPos\x12 .protocol.handler.CS_SyncPos_Ntf\x1a\x16.google.protobuf.Empty\x1a\b\x88\xb5\x18\x00\x90\xb5\x18\x02B$Z\"project/protocol/handler;handlerpbb\x06proto3"
+	"\aSyncPos\x12 .protocol.handler.CS_SyncPos_Ntf\x1a\x16.google.protobuf.Empty\x12D\n" +
+	"\x04Ping\x12\x1d.protocol.handler.CS_Ping_Req\x1a\x1d.protocol.handler.SC_Tong_Rsp\x1a\b\x88\xb5\x18\x00\x90\xb5\x18\x02B$Z\"project/protocol/handler;handlerpbb\x06proto3"
 
 var (
 	file_protocol_handler_lobby_handler_proto_rawDescOnce sync.Once
@@ -155,20 +248,24 @@ func file_protocol_handler_lobby_handler_proto_rawDescGZIP() []byte {
 	return file_protocol_handler_lobby_handler_proto_rawDescData
 }
 
-var file_protocol_handler_lobby_handler_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_protocol_handler_lobby_handler_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_protocol_handler_lobby_handler_proto_goTypes = []any{
 	(*CS_ClaimReward_Req)(nil), // 0: protocol.handler.CS_ClaimReward_Req
 	(*SC_ClaimReward_Rsp)(nil), // 1: protocol.handler.SC_ClaimReward_Rsp
 	(*CS_SyncPos_Ntf)(nil),     // 2: protocol.handler.CS_SyncPos_Ntf
-	(*emptypb.Empty)(nil),      // 3: google.protobuf.Empty
+	(*CS_Ping_Req)(nil),        // 3: protocol.handler.CS_Ping_Req
+	(*SC_Tong_Rsp)(nil),        // 4: protocol.handler.SC_Tong_Rsp
+	(*emptypb.Empty)(nil),      // 5: google.protobuf.Empty
 }
 var file_protocol_handler_lobby_handler_proto_depIdxs = []int32{
 	0, // 0: protocol.handler.LobbyHandler.ClaimReward:input_type -> protocol.handler.CS_ClaimReward_Req
 	2, // 1: protocol.handler.LobbyHandler.SyncPos:input_type -> protocol.handler.CS_SyncPos_Ntf
-	1, // 2: protocol.handler.LobbyHandler.ClaimReward:output_type -> protocol.handler.SC_ClaimReward_Rsp
-	3, // 3: protocol.handler.LobbyHandler.SyncPos:output_type -> google.protobuf.Empty
-	2, // [2:4] is the sub-list for method output_type
-	0, // [0:2] is the sub-list for method input_type
+	3, // 2: protocol.handler.LobbyHandler.Ping:input_type -> protocol.handler.CS_Ping_Req
+	1, // 3: protocol.handler.LobbyHandler.ClaimReward:output_type -> protocol.handler.SC_ClaimReward_Rsp
+	5, // 4: protocol.handler.LobbyHandler.SyncPos:output_type -> google.protobuf.Empty
+	4, // 5: protocol.handler.LobbyHandler.Ping:output_type -> protocol.handler.SC_Tong_Rsp
+	3, // [3:6] is the sub-list for method output_type
+	0, // [0:3] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
@@ -185,7 +282,7 @@ func file_protocol_handler_lobby_handler_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_protocol_handler_lobby_handler_proto_rawDesc), len(file_protocol_handler_lobby_handler_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

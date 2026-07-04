@@ -126,9 +126,6 @@ func CheckLobbyReload(candidate *LobbyConfig, current *LobbyConfig) error {
 	if candidate == nil || current == nil {
 		return nil
 	}
-	if !reflect.DeepEqual(candidate.ListenAddr, current.ListenAddr) {
-		return fmt.Errorf("listen_addr cannot reload")
-	}
 	if !reflect.DeepEqual(candidate.MaxPlayer, current.MaxPlayer) {
 		return fmt.Errorf("max_player cannot reload")
 	}

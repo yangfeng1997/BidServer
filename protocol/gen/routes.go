@@ -11,9 +11,11 @@ type RouteEntry struct {
 var RouteTable = map[uint32]RouteEntry{
 	2050: {ServerType: serverTypeLobby, Route: "LobbyHandler/ClaimReward", RspCmdID: 2051},
 	2052: {ServerType: serverTypeLobby, Route: "LobbyHandler/SyncPos", RspCmdID: 0},
+	2054: {ServerType: serverTypeLobby, Route: "LobbyHandler/Ping", RspCmdID: 2055},
 }
 
 // AuthWhitelist 表示免鉴权的 CmdID 集合
 var AuthWhitelist = map[uint32]bool{
 	2052: true,
+	2054: true,
 }

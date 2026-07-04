@@ -18,6 +18,7 @@ import (
 	corerpc "project/internal/core/rpc"
 	"project/internal/core/session"
 	"project/internal/server/routeragent"
+	"project/pkg/logger"
 	"project/protocol/common"
 	genrpc "project/protocol/gen"
 	remotepb "project/protocol/remote"
@@ -188,7 +189,26 @@ func (m *Module) forwardToBackend(sess *session.Session, msg *codec.Message, ent
 	sessConnID := sess.ConnID
 	switch msg.Type {
 	case codec.MessageRequest:
+		if entry.Route == "LobbyHandler/Ping" {
+			logger.Info("ping gate forward to lobby",
+				logger.Uint32("cmd_id", msg.CmdID),
+				logger.Uint32("rsp_cmd_id", entry.RspCmdID),
+				logger.Uint64("client_seq", uint64(msg.SeqID)),
+				logger.String("session_id", sessID),
+				logger.String("route", entry.Route),
+				logger.Uint32("server_type", entry.ServerType),
+				logger.Uint32("from_node", m.App().NodeIDUint32()))
+		}
 		m.rpcCore.Call(target, entry.Route, msg.Body, ctx, func(payload []byte, code errcode.ErrCode) {
+			if entry.Route == "LobbyHandler/Ping" {
+				logger.Info("tong gate receive from lobby",
+					logger.Uint32("rsp_cmd_id", entry.RspCmdID),
+					logger.Uint64("client_seq", uint64(msg.SeqID)),
+					logger.String("session_id", sessID),
+					logger.String("route", entry.Route),
+					logger.Uint32("err_code", uint32(code)),
+					logger.Int("payload_len", len(payload)))
+			}
 			current := m.sessions.GetByConnID(sessConnID)
 			if current == nil || current.ID != sessID || current.Conn == nil {
 				return
@@ -200,6 +220,14 @@ func (m *Module) forwardToBackend(sess *session.Session, msg *codec.Message, ent
 			pkt, encErr := codec.EncodePacket(codec.Packet{Type: codec.PacketData, Body: rsp})
 			if encErr != nil {
 				return
+			}
+			if entry.Route == "LobbyHandler/Ping" {
+				logger.Info("tong gate send to client",
+					logger.Uint32("rsp_cmd_id", entry.RspCmdID),
+					logger.Uint64("client_seq", uint64(msg.SeqID)),
+					logger.String("session_id", sessID),
+					logger.Uint32("err_code", uint32(code)),
+					logger.Int("packet_len", len(pkt)))
 			}
 			current.Conn.Send(pkt)
 		})

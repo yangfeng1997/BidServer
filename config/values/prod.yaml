@@ -5,7 +5,6 @@ svr_list:
 
 gate_listen_tcp: "0.0.0.0:7001"
 gate_listen_ws: "0.0.0.0:7002"
-lobby_listen_addr: "0.0.0.0:7003"
 routeragent_sock_path: "/run/routeragent/ra.sock"
 routeragent_listen_addr: "127.0.0.1:7100"
 cluster_name: "bidserver"

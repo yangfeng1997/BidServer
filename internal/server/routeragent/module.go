@@ -12,6 +12,7 @@ import (
 
 	"project/internal/core/app"
 	"project/internal/core/nodeid"
+	"project/pkg/logger"
 	"project/protocol/common"
 )
 
@@ -70,39 +71,66 @@ func NewModule() *Module {
 func (m *Module) Name() string { return moduleName }
 
 func (m *Module) Init() error {
+	logger.Info("routeragent init start", logger.String("node_id", m.App().NodeID()), logger.Uint32("node_id_u32", m.App().NodeIDUint32()))
 	if p, ok := m.App().(app.Poster); ok {
 		m.poster = p
+		logger.Info("routeragent poster use app poster")
 	} else {
 		m.poster = PosterFunc(func(fn func()) { fn() })
+		logger.Warn("routeragent app poster missing, use inline poster")
 	}
+	if m.listenAddr == "" {
+		return fmt.Errorf("routeragent listen_addr is required")
+	}
+	logger.Info("routeragent listen addr ready", logger.String("listen_addr", m.listenAddr))
 	commonCfg := CommonConfig()
 	if commonCfg != nil && m.App().NodeIDUint32() != 0 {
 		prefix := NodePrefix(commonCfg.Cluster.Name, commonCfg.Cluster.Env, commonCfg.Cluster.WorldId)
+		logger.Info("routeragent etcd registry init start",
+			logger.String("cluster_name", commonCfg.Cluster.Name),
+			logger.String("cluster_env", commonCfg.Cluster.Env),
+			logger.Uint32("world_id", commonCfg.Cluster.WorldId),
+			logger.String("prefix", prefix),
+			logger.Any("endpoints", commonCfg.Etcd.Endpoints))
 		registry, err := NewEtcdRegistry(commonCfg.Etcd.Endpoints, prefix)
 		if err != nil {
+			logger.Error("routeragent etcd registry init failed", logger.String("prefix", prefix), logger.Err(err))
 			return err
 		}
 		m.registry = registry
+		logger.Info("routeragent etcd registry init done", logger.String("prefix", prefix))
+	} else {
+		logger.Warn("routeragent etcd registry skipped", logger.Bool("common_config_nil", commonCfg == nil), logger.Uint32("node_id_u32", m.App().NodeIDUint32()))
 	}
+	logger.Info("routeragent init done", logger.String("listen_addr", m.listenAddr))
 	return nil
 }
 
 // AfterInit 启动 routeragent 子组件
 func (m *Module) AfterInit() error {
+	logger.Info("routeragent after init start", logger.String("sock_path", m.sockPath), logger.String("listen_addr", m.listenAddr))
 	m.udsServer = NewUDSServer(m.sockPath, m.handleConn)
+	logger.Info("routeragent uds listen start", logger.String("sock_path", m.sockPath))
 	if err := m.udsServer.Listen(); err != nil {
+		logger.Error("routeragent uds listen failed", logger.String("sock_path", m.sockPath), logger.Err(err))
 		m.ready.Fail(err)
 		return err
 	}
+	logger.Info("routeragent uds listen done", logger.String("sock_path", m.sockPath))
 	go m.udsServer.Serve(m.stopCh)
+	logger.Info("routeragent keepalive start")
 	go m.keepalive.Run(m.stopCh)
 
 	if m.registry != nil {
 		serverType := uint32(common.ServerType_ST_ROUTERAGENT)
+		logger.Info("routeragent etcd self register start", logger.Uint32("node_id", m.App().NodeIDUint32()), logger.String("listen_addr", m.listenAddr), logger.Uint32("server_type", serverType))
 		if err := m.registry.Register(m.App().NodeIDUint32(), m.listenAddr, serverType); err != nil {
+			logger.Error("routeragent etcd self register failed", logger.Uint32("node_id", m.App().NodeIDUint32()), logger.String("listen_addr", m.listenAddr), logger.Err(err))
 			m.ready.Fail(err)
 			return err
 		}
+		logger.Info("routeragent etcd self register done", logger.Uint32("node_id", m.App().NodeIDUint32()), logger.String("listen_addr", m.listenAddr))
+		logger.Info("routeragent etcd discover start")
 		if err := m.registry.Discover(func(info NodeInfo, serverType uint32) {
 			upsertInfo := info
 			st := serverType
@@ -114,17 +142,25 @@ func (m *Module) AfterInit() error {
 				m.memberTable.Delete(nodeID)
 			})
 		}); err != nil {
+			logger.Error("routeragent etcd discover failed", logger.Err(err))
 			m.ready.Fail(err)
 			return err
 		}
+		logger.Info("routeragent etcd discover done")
 	}
 	if m.listenAddr != "" {
 		m.peerMgr.SetListenAddr(m.listenAddr)
 		m.tcpServer = NewTCPServer(m.listenAddr, m.listenAddr, m.handleIncomingPeer)
-		if err := m.tcpServer.Listen(); err == nil {
-			go m.tcpServer.Serve(m.stopCh)
+		logger.Info("routeragent tcp listen start", logger.String("listen_addr", m.listenAddr))
+		if err := m.tcpServer.Listen(); err != nil {
+			logger.Error("routeragent tcp listen failed", logger.String("listen_addr", m.listenAddr), logger.Err(err))
+			m.ready.Fail(err)
+			return err
 		}
+		logger.Info("routeragent tcp listen done", logger.String("listen_addr", m.listenAddr))
+		go m.tcpServer.Serve(m.stopCh)
 	}
+	logger.Info("routeragent after init done", logger.String("listen_addr", m.listenAddr), logger.String("sock_path", m.sockPath))
 	m.ready.Done()
 	return nil
 }
@@ -180,15 +216,19 @@ func (m *Module) handleFrame(c *UDSConn, frame Frame) {
 	switch frame.Type {
 	case FrameHandshake:
 		if len(frame.Body) < 4 {
+			logger.Warn("routeragent business handshake invalid", logger.String("remote", c.RemoteAddr()), logger.Int("body_len", len(frame.Body)))
 			return
 		}
 		nodeID := binary.BigEndian.Uint32(frame.Body[:4])
 		_, serverType, _ := nodeid.Decode(nodeID)
+		logger.Info("routeragent business handshake start", logger.String("remote", c.RemoteAddr()), logger.Uint32("node_id", nodeID), logger.String("node_id_text", nodeid.String(nodeID)), logger.Uint32("server_type", serverType), logger.String("listen_addr", m.listenAddr))
 		if m.registry != nil {
 			if err := m.registry.PutNode(nodeID, m.listenAddr, serverType); err != nil {
+				logger.Error("routeragent business etcd register failed", logger.Uint32("node_id", nodeID), logger.String("node_id_text", nodeid.String(nodeID)), logger.Uint32("server_type", serverType), logger.String("listen_addr", m.listenAddr), logger.Err(err))
 				_ = c.Send(Frame{Type: FrameHandshakeAck, Body: []byte{0}})
 				return
 			}
+			logger.Info("routeragent business etcd register done", logger.Uint32("node_id", nodeID), logger.String("node_id_text", nodeid.String(nodeID)), logger.Uint32("server_type", serverType), logger.String("listen_addr", m.listenAddr))
 		}
 		m.memberTable.Upsert(NodeInfo{
 			NodeID:  nodeID,
@@ -196,6 +236,7 @@ func (m *Module) handleFrame(c *UDSConn, frame Frame) {
 			StartAt: time.Now().Unix(),
 		}, serverType)
 		m.registerConn(nodeID, c)
+		logger.Info("routeragent business handshake done", logger.Uint32("node_id", nodeID), logger.String("node_id_text", nodeid.String(nodeID)), logger.Uint32("server_type", serverType))
 		_ = c.Send(Frame{Type: FrameHandshakeAck, Body: []byte{1}})
 	case FrameHeartbeat:
 		_ = c.Send(Frame{Type: FrameHeartbeat, Body: nil})

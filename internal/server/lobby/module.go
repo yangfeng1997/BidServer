@@ -4,18 +4,33 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
+
+	"google.golang.org/protobuf/proto"
 
 	"project/internal/core/app"
+	"project/internal/core/errcode"
 	"project/internal/core/ragent"
+	corerpc "project/internal/core/rpc"
+	"project/internal/server/routeragent"
+	"project/pkg/logger"
+	handlerpb "project/protocol/handler"
 )
 
 const moduleName = "lobby"
+
+type routeragentClient interface {
+	Connect() error
+	Close() error
+	Send(routeragent.Frame) error
+}
 
 type Module struct {
 	app.BaseModule
 	ready    *app.Ready
 	cfg      *LobbyConfigEntry
-	client   *ragent.Client
+	client   routeragentClient
+	handler  *Handler
 	stopOnce sync.Once
 }
 
@@ -39,7 +54,8 @@ func (m *Module) Init() error {
 	if !ok {
 		return fmt.Errorf("lobby app does not implement poster")
 	}
-	m.client = ragent.NewClient(m.App().NodeIDUint32(), cfg.RouteragentSockPath, poster, nil)
+	m.handler = NewHandler()
+	m.client = ragent.NewClient(m.App().NodeIDUint32(), cfg.RouteragentSockPath, poster, m.handleRagentFrame)
 	return nil
 }
 
@@ -63,3 +79,116 @@ func (m *Module) BeforeShutdown() {
 }
 
 func (m *Module) Shutdown() {}
+
+func (m *Module) handleRagentFrame(frame routeragent.Frame) {
+	switch frame.Type {
+	case routeragent.FrameRpcRequest, routeragent.FrameRpcNotify:
+		m.handleInbound(frame)
+	}
+}
+
+func (m *Module) handleInbound(frame routeragent.Frame) {
+	head, err := routeragent.DecodeRPCWireHeader(frame.Header)
+	if err != nil {
+		return
+	}
+	var code errcode.ErrCode = errcode.OK
+	if err := m.dispatchRoute(head, frame.Body, func(payload []byte, err error) {
+		if frame.Type != routeragent.FrameRpcRequest || head.SeqID == 0 {
+			return
+		}
+		rspHead := head
+		rspHead.ErrCode = uint32(errcode.CodeOf(err))
+		_ = m.client.Send(routeragent.Frame{Type: routeragent.FrameRpcResponse, Header: routeragent.EncodeRPCWireHeader(rspHead), Body: payload})
+	}); err != nil {
+		code = errcode.CodeOf(err)
+	}
+	if frame.Type == routeragent.FrameRpcRequest && head.SeqID != 0 && code != errcode.OK {
+		head.ErrCode = uint32(code)
+		_ = m.client.Send(routeragent.Frame{Type: routeragent.FrameRpcResponse, Header: routeragent.EncodeRPCWireHeader(head)})
+	}
+}
+
+func (m *Module) dispatchRoute(head routeragent.RPCWireHeader, body []byte, reply func([]byte, error)) error {
+	ctx := inboundCtx(head)
+	switch head.Route {
+	case "LobbyHandler/ClaimReward":
+		var req handlerpb.CS_ClaimReward_Req
+		if err := proto.Unmarshal(body, &req); err != nil {
+			return errcode.New(errcode.ERR_UNMARSHAL, err.Error())
+		}
+		m.handler.ClaimReward(ctx, &req, replyHandler[*handlerpb.SC_ClaimReward_Rsp](reply))
+		return nil
+	case "LobbyHandler/SyncPos":
+		var ntf handlerpb.CS_SyncPos_Ntf
+		if err := proto.Unmarshal(body, &ntf); err != nil {
+			return errcode.New(errcode.ERR_UNMARSHAL, err.Error())
+		}
+		m.handler.SyncPos(ctx, &ntf)
+		return nil
+	case "LobbyHandler/Ping":
+		var req handlerpb.CS_Ping_Req
+		if err := proto.Unmarshal(body, &req); err != nil {
+			return errcode.New(errcode.ERR_UNMARSHAL, err.Error())
+		}
+		logger.Info("ping lobby receive from gate",
+			logger.Uint64("rpc_seq", head.SeqID),
+			logger.Uint32("from_node", head.FromNodeID),
+			logger.String("route", head.Route),
+			logger.String("text", req.GetText()))
+		m.handler.Ping(ctx, &req, replyHandler[*handlerpb.SC_Tong_Rsp](func(payload []byte, err error) {
+			logger.Info("tong lobby send to gate",
+				logger.Uint64("rpc_seq", head.SeqID),
+				logger.Uint32("from_node", head.FromNodeID),
+				logger.String("route", head.Route),
+				logger.Uint32("err_code", uint32(errcode.CodeOf(err))),
+				logger.Int("payload_len", len(payload)))
+			reply(payload, err)
+		}))
+		return nil
+	default:
+		return errcode.New(errcode.ERR_NO_ROUTE, "route not found: "+head.Route)
+	}
+}
+
+func replyHandler[T proto.Message](reply func([]byte, error)) corerpc.Reply[T] {
+	return func(rsp T, err error) {
+		if reply == nil {
+			return
+		}
+		if err != nil {
+			reply(nil, err)
+			return
+		}
+		if proto.Message(rsp) == nil {
+			reply(nil, errcode.New(errcode.ERR_INTERNAL, "nil response"))
+			return
+		}
+		payload, merr := proto.Marshal(rsp)
+		if merr != nil {
+			reply(nil, errcode.New(errcode.ERR_INTERNAL, merr.Error()))
+			return
+		}
+		reply(payload, nil)
+	}
+}
+
+func inboundCtx(head routeragent.RPCWireHeader) corerpc.Ctx {
+	ctx := corerpc.Background().WithFromNode(head.FromNodeID)
+	if head.DeadlineMs > 0 {
+		ctx = ctx.WithDeadline(time.Duration(head.DeadlineMs) * time.Millisecond)
+	}
+	return ctx
+}
+
+func NewModuleForTest() *Module {
+	return &Module{ready: app.NewReady(), handler: NewHandler()}
+}
+
+func (m *Module) HandleRagentFrame(frame routeragent.Frame) {
+	m.handleRagentFrame(frame)
+}
+
+func (m *Module) SetClient(client routeragentClient) {
+	m.client = client
+}
