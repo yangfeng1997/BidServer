@@ -228,10 +228,12 @@ etcd 中：
 2. RouterAgent A 根据 RPC header 选出目标 `99.2.0`。
 3. RouterAgent A 查本地 `MemberTable`：`99.2.0 -> 10.0.0.2:7100`。
 4. RouterAgent A 如果还没有到 `10.0.0.2:7100` 的 TCP peer，就懒连接 RouterAgent B。
-5. RouterAgent A 把 frame 通过 TCP 发给 RouterAgent B。
-6. RouterAgent B 查本地 UDS 连接表：`99.2.0 -> UDSConn`。
-7. RouterAgent B 投递给本机 lobbysvr。
-8. 如果是 request，回包沿 remote seq 映射返回调用方。
+5. RouterAgent A 为 request 分配 remote seq，记录原始 UDS 连接和原始 seq。
+6. RouterAgent A 把 frame 改写为 direct target：`RoutingKey = 99.2.0`，但保留 `FromNodeID = 99.1.0`。
+7. RouterAgent A 把 frame 通过 TCP 发给 RouterAgent B。
+8. RouterAgent B 按 `RoutingKey` 查本地 UDS 连接表：`99.2.0 -> UDSConn`。
+9. RouterAgent B 投递给本机 lobbysvr；`FromNodeID` 继续表示调用方，不用于本地投递。
+10. 如果是 request，回包沿 remote seq 映射返回调用方。
 
 ## 路由模式与节点表关系
 
@@ -299,6 +301,8 @@ RouterAgent 之间通过 TCP peer 连接转发跨机 RPC。peer 握手时双方�
 
 ### 发送链路与 pending queue
 
+跨 RouterAgent 的 request/notify 必须区分来源和目标：`FromNodeID` 始终是原始调用方节点，`RoutingModeDirect + RoutingKey` 才表示远端 RouterAgent 需要投递的目标业务 NodeID。发送方可以把跨机 frame 改写成 direct target，但不能把 `FromNodeID` 改成目标节点，否则回包会丢失原始调用方语义并导致 RPC 超时。
+
 主路由路径不在主循环里同步拨号，而是走 `sendPeerOrQueue`：
 
 - 已连接且 link 可用：非阻塞发送。
@@ -343,6 +347,7 @@ GameServer 当前源码中服务发现骨架存在，但代业务节点注册到
 - Etcd 中 `node_id` 使用可读字符串。
 - RouterAgent 可 watch etcd 并更新 `MemberTable`。
 - RouterAgent 使用配置中的 `routeragent_listen_addr` 作为跨 RA TCP 地址。
+- 跨 RouterAgent 转发时保留原始 `FromNodeID`，并使用 direct `RoutingKey` 指定远端本地投递目标。
 - RouterAgent peer 连接按远端 `listenAddr` 建立 active link，重复连接会替换旧连接并主动关闭旧 link。
 - 主路由路径走 `sendPeerOrQueue`：已连接直接非阻塞发送，未连接/连接中进入 per-peer bounded pending queue（上限 8192），异步建连成功后 flush，失败或队列满时 request 立即回 `ERR_INTERNAL`。
 - 拨号和握手受 `peerDialTimeout = 3s` deadline 约束，不会阻塞 RouterAgent 主循环。

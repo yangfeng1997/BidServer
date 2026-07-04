@@ -231,8 +231,7 @@ func (m *Module) sendPeerOutbound(link PeerLink, item peerOutbound) error {
 			remoteSeq := m.remoteSeq.Alloc(item.source, item.origSeqID)
 			head.SeqID = remoteSeq
 		}
-		head.FromNodeID = item.targetNodeID
-		if frame.Type == FrameRpcRequest {
+		if item.targetNodeID != 0 {
 			head.RoutingMode = uint8(RoutingModeDirect)
 			head.RoutingKey = fmt.Sprintf("%d", item.targetNodeID)
 		}
