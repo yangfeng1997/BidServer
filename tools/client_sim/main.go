@@ -1,5 +1,14 @@
 package main
 
+// 压测示例：
+//
+// 	go build -o main .
+// 	./main --clients 10 --requests 100 --quiet
+// 	./main --clients 100 --requests 1000 --quiet --report-every 1s
+//
+// 单次连通性验证：
+//
+// 	./main
 import (
 	"flag"
 	"fmt"
