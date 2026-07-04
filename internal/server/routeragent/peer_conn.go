@@ -47,16 +47,14 @@ func (m *Module) handleIncomingPeer(conn net.Conn, listenAddr string) {
 		return
 	}
 
-	// 防双向重复建连：两边比较 listenAddr 字典序
-	if !m.DedupPeer(listenAddr, peerListenAddr, "incoming") {
-		logger.Warn("routeragent peer dedup rejected", logger.String("direction", "incoming"), logger.String("listen_addr", listenAddr), logger.String("peer_listen_addr", peerListenAddr))
-		m.metrics.PeerConnectFailTotal.Add(1)
-		return
-	}
-
-	// 包装为 PeerLink
+	// 包装为 PeerLink。若双边同时建连，新连接会替换旧连接并主动关闭旧连接，避免残留双连接。
 	pl := &tcpPeerLink{conn: conn, addr: peerListenAddr, sendCh: make(chan Frame, 64), done: make(chan struct{})}
-	m.peerMgr.Attach(peerListenAddr, pl)
+	old, replaced := m.peerMgr.Attach(peerListenAddr, pl, "incoming")
+	if replaced {
+		logger.Warn("routeragent peer replaced old connection", logger.String("direction", "incoming"), logger.String("peer_listen_addr", peerListenAddr), logger.String("listen_addr", listenAddr))
+		m.metrics.PeerDisconnectTotal.Add(1)
+		_ = old.Close()
+	}
 	m.metrics.PeerConnectTotal.Add(1)
 	logger.Info("routeragent peer connected", logger.String("direction", "incoming"), logger.String("remote_addr", addr), logger.String("peer_listen_addr", peerListenAddr), logger.String("listen_addr", listenAddr))
 
@@ -70,9 +68,10 @@ func (m *Module) handleIncomingPeer(conn net.Conn, listenAddr string) {
 	})
 
 	close(writeDone)
-	m.peerMgr.Disconnect(peerListenAddr)
-	m.metrics.PeerDisconnectTotal.Add(1)
-	logger.Warn("routeragent peer disconnected", logger.String("direction", "incoming"), logger.String("peer_listen_addr", peerListenAddr), logger.String("remote_addr", addr))
+	if m.peerMgr.Detach(peerListenAddr, pl) {
+		m.metrics.PeerDisconnectTotal.Add(1)
+		logger.Warn("routeragent peer disconnected", logger.String("direction", "incoming"), logger.String("peer_listen_addr", peerListenAddr), logger.String("remote_addr", addr))
+	}
 }
 
 // handlePeerFrame 处理从远端 peer 收到的帧
@@ -132,10 +131,14 @@ func (l *tcpPeerLink) Send(f Frame) error {
 }
 
 func (l *tcpPeerLink) Close() error {
+	var err error
 	l.once.Do(func() {
 		close(l.done)
+		if l.conn != nil {
+			err = l.conn.Close()
+		}
 	})
-	return nil
+	return err
 }
 
 func (l *tcpPeerLink) writeLoop(done <-chan struct{}) {

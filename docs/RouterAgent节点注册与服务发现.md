@@ -284,6 +284,19 @@ RouterAgent 处理业务握手时至少应校验：
 
 同一 VPC / 内网部署时建议配置内网 IP，例如 `10.0.0.8:7100`。跨公网或跨云部署时，应配置公网 IP、域名或 VPN / 专线内网地址，并确保安全组、防火墙放行该端口。
 
+## Peer 连接去重
+
+RouterAgent 之间通过 TCP peer 连接转发跨机 RPC。peer 握手时双方交换自己的 `listenAddr`，本地 `PeerMgr` 以远端 `listenAddr` 为 key 保存连接。
+
+当前 peer 去重采用“连接替换 + 精确摘除”语义：
+
+- 第一条握手成功的 incoming / outgoing 连接都会被接受。
+- 如果同一远端 `listenAddr` 已经存在 active link，新连接会替换旧连接。
+- 被替换的旧 link 会被主动关闭，避免双连接残留。
+- 旧连接读循环退出时只会摘除自己；如果它已经被新连接替换，不会误删新连接。
+
+双边同时建连时，最终也会收敛为每个远端 RouterAgent 一条 active link。
+
 ## 与 GameServer 参考实现的关系
 
 GameServer 的设计文档同样采用 sidecar 模型：
@@ -310,6 +323,7 @@ GameServer 当前源码中服务发现骨架存在，但代业务节点注册到
 - Etcd 中 `node_id` 使用可读字符串。
 - RouterAgent 可 watch etcd 并更新 `MemberTable`。
 - RouterAgent 使用配置中的 `routeragent_listen_addr` 作为跨 RA TCP 地址。
+- RouterAgent peer 连接按远端 `listenAddr` 建立 active link，重复连接会替换旧连接并主动关闭旧 link。
 
 仍需继续收口或验证：
 

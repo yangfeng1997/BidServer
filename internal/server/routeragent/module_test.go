@@ -29,7 +29,7 @@ func TestRouteFrame(t *testing.T) {
 	nodeID := uint32(0x01020304)
 	m.MemberTable().Upsert(NodeInfo{NodeID: nodeID, RAAddr: "peer"}, 2)
 	link := &UDSConn{remoteAddr: "peer", done: make(chan struct{}), sendCh: make(chan Frame, 1), recvCh: make(chan Frame, 1)}
-	m.PeerMgr().Attach("peer", link)
+	m.PeerMgr().Attach("peer", link, "test")
 	head := RPCWireHeader{ServerType: 2, RoutingMode: uint8(RoutingModeDirect), RoutingKey: "16909060", Route: "test"}
 	m.routeFrame(&UDSConn{remoteAddr: "local"}, Frame{Type: FrameRpcRequest, Header: EncodeRPCWireHeader(head), Body: []byte("hi")})
 	select {

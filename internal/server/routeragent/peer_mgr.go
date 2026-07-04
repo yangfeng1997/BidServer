@@ -28,9 +28,10 @@ const (
 
 // 远端 RA 信息
 type PeerInfo struct {
-	Addr  string
-	State PeerState
-	Link  PeerLink
+	Addr      string
+	State     PeerState
+	Link      PeerLink
+	Direction string
 }
 
 // PeerMgr 管理跨机 peer 连接
@@ -55,8 +56,8 @@ func (m *PeerMgr) Get(addr string) *PeerInfo {
 	return m.peers[addr]
 }
 
-// Attach 绑定 peer 连接
-func (m *PeerMgr) Attach(addr string, link PeerLink) {
+// Attach 绑定 peer 连接，必要时替换旧连接并返回被替换的连接。
+func (m *PeerMgr) Attach(addr string, link PeerLink, direction string) (old PeerLink, replaced bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	peer := m.peers[addr]
@@ -64,8 +65,14 @@ func (m *PeerMgr) Attach(addr string, link PeerLink) {
 		peer = &PeerInfo{Addr: addr}
 		m.peers[addr] = peer
 	}
+	if peer.Link != nil && peer.Link != link {
+		old = peer.Link
+		replaced = true
+	}
 	peer.Link = link
 	peer.State = PeerConnected
+	peer.Direction = direction
+	return old, replaced
 }
 
 // SetState 设置 peer 状态
@@ -80,11 +87,23 @@ func (m *PeerMgr) SetState(addr string, state PeerState) {
 	peer.State = state
 }
 
-// 移除 peer 连接
+// Disconnect 移除 peer 连接。
 func (m *PeerMgr) Disconnect(addr string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.peers, addr)
+}
+
+// Detach 移除指定连接，避免旧连接关闭时删除已经替换的新连接。
+func (m *PeerMgr) Detach(addr string, link PeerLink) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	peer := m.peers[addr]
+	if peer == nil || peer.Link != link {
+		return false
+	}
+	delete(m.peers, addr)
+	return true
 }
 
 // List 返回所有 peer
@@ -158,19 +177,14 @@ func (m *Module) DialPeer(addr string) error {
 	peerListenAddr := string(peerAddrBuf)
 	logger.Info("routeragent peer handshake receive done", logger.String("peer_addr", addr), logger.String("peer_listen_addr", peerListenAddr), logger.String("listen_addr", listenAddr))
 
-	// 防双向重复建连
-	if !m.DedupPeer(listenAddr, peerListenAddr, "outgoing") {
-		logger.Warn("routeragent peer dedup rejected", logger.String("direction", "outgoing"), logger.String("listen_addr", listenAddr), logger.String("peer_listen_addr", peerListenAddr))
-		conn.Close()
-		m.peerMgr.SetState(addr, PeerDisconnected)
-		m.metrics.PeerConnectFailTotal.Add(1)
-		return errors.New("dedup: connection rejected")
-	}
-
-	// 包装为 PeerLink 并启动读写循环
+	// 包装为 PeerLink 并启动读写循环。
 	pl := &tcpPeerLink{conn: conn, addr: peerListenAddr, sendCh: make(chan Frame, 64), done: make(chan struct{})}
-	m.peerMgr.Attach(peerListenAddr, pl)
-	m.peerMgr.SetState(peerListenAddr, PeerConnected)
+	old, replaced := m.peerMgr.Attach(peerListenAddr, pl, "outgoing")
+	if replaced {
+		logger.Warn("routeragent peer replaced old connection", logger.String("direction", "outgoing"), logger.String("peer_listen_addr", peerListenAddr), logger.String("listen_addr", listenAddr))
+		m.metrics.PeerDisconnectTotal.Add(1)
+		_ = old.Close()
+	}
 	m.metrics.PeerConnectTotal.Add(1)
 	logger.Info("routeragent peer connected", logger.String("direction", "outgoing"), logger.String("peer_addr", addr), logger.String("peer_listen_addr", peerListenAddr), logger.String("listen_addr", listenAddr))
 
@@ -183,9 +197,10 @@ func (m *Module) DialPeer(addr string) error {
 			})
 		})
 		close(writeDone)
-		m.peerMgr.Disconnect(peerListenAddr)
-		m.metrics.PeerDisconnectTotal.Add(1)
-		logger.Warn("routeragent peer disconnected", logger.String("direction", "outgoing"), logger.String("peer_listen_addr", peerListenAddr))
+		if m.peerMgr.Detach(peerListenAddr, pl) {
+			m.metrics.PeerDisconnectTotal.Add(1)
+			logger.Warn("routeragent peer disconnected", logger.String("direction", "outgoing"), logger.String("peer_listen_addr", peerListenAddr))
+		}
 	}()
 
 	return nil
@@ -215,12 +230,4 @@ func (m *Module) HandshakePeer(addr string, nodeID uint32) error {
 	body := make([]byte, 4)
 	binary.BigEndian.PutUint32(body, nodeID)
 	return peer.Link.Send(Frame{Type: FrameHandshake, Body: body})
-}
-
-// DedupPeer 防双向重复建连
-func (m *Module) DedupPeer(localAddr, remoteAddr, direction string) bool {
-	if localAddr > remoteAddr {
-		return direction == "outgoing"
-	}
-	return direction == "incoming"
 }
