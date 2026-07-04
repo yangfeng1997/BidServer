@@ -58,6 +58,8 @@ func (m *Module) handleIncomingPeer(conn net.Conn, listenAddr string) {
 	}
 	m.metrics.PeerConnectTotal.Add(1)
 	logger.Info("routeragent peer connected", logger.String("direction", "incoming"), logger.String("remote_addr", addr), logger.String("peer_listen_addr", peerListenAddr), logger.String("listen_addr", listenAddr), logger.Int("pending", len(pending)))
+	writeDone := make(chan struct{})
+	go pl.writeLoop(writeDone)
 	m.flushPeerPending(pl, pending)
 
 	pl.readLoop(func(f Frame) {
@@ -65,6 +67,7 @@ func (m *Module) handleIncomingPeer(conn net.Conn, listenAddr string) {
 			m.handlePeerFrame(f)
 		})
 	})
+	close(writeDone)
 
 	if m.peerMgr.Detach(peerListenAddr, pl) {
 		m.metrics.PeerDisconnectTotal.Add(1)

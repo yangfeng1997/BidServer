@@ -139,11 +139,12 @@ func (m *Module) dispatchRoute(head routeragent.RPCWireHeader, body []byte, repl
 			logger.String("route", head.Route),
 			logger.String("text", req.GetText()))
 		m.handler.Ping(ctx, &req, replyHandler[*handlerpb.SC_Tong_Rsp](func(payload []byte, err error) {
+			rspHead := responseHead(head, 0)
 			logger.Info("tong lobby send to gate",
-				logger.Uint64("rpc_seq", head.SeqID),
-				logger.Uint32("src_node", head.SrcNodeID),
-				logger.Uint32("dest_node", head.DestNodeID),
-				logger.String("route", head.Route),
+				logger.Uint64("rpc_seq", rspHead.SeqID),
+				logger.Uint32("src_node", rspHead.SrcNodeID),
+				logger.Uint32("dest_node", rspHead.DestNodeID),
+				logger.String("route", rspHead.Route),
 				logger.Uint32("err_code", uint32(errcode.CodeOf(err))),
 				logger.Int("payload_len", len(payload)))
 			reply(payload, err)
