@@ -36,9 +36,9 @@ type TCPConn struct {
 func NewTCPConn(c net.Conn) *TCPConn {
 	t := &TCPConn{
 		conn:   c,
-		sendCh: make(chan []byte, 256),
+		sendCh: make(chan []byte, 4096),
 		done:   make(chan struct{}),
-		recvCh: make(chan *codec.Packet, 64),
+		recvCh: make(chan *codec.Packet, 4096),
 	}
 	t.TouchRecv()
 	go t.writeLoop()

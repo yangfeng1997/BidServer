@@ -14,6 +14,7 @@ type UDSConn struct {
 	sendCh     chan Frame
 	recvCh     chan Frame
 	done       chan struct{}
+	flushCh    chan struct{}
 	closeOnce  sync.Once
 }
 
@@ -22,9 +23,10 @@ func NewUDSConn(c net.Conn) *UDSConn {
 	u := &UDSConn{
 		conn:       c,
 		remoteAddr: c.RemoteAddr().String(),
-		sendCh:     make(chan Frame, 64),
-		recvCh:     make(chan Frame, 64),
+		sendCh:     make(chan Frame, 4096),
+		recvCh:     make(chan Frame, 4096),
 		done:       make(chan struct{}),
+		flushCh:    make(chan struct{}, 1),
 	}
 	go u.readLoop()
 	go u.writeLoop()
@@ -37,7 +39,7 @@ func (u *UDSConn) RemoteAddr() string { return u.remoteAddr }
 // Recv 返回接收通道
 func (u *UDSConn) Recv() <-chan Frame { return u.recvCh }
 
-// Send 投递一条帧
+// Send 投递一条帧。非阻塞，channel 满时丢弃。需要立即发出时请后续调用 Flush。
 func (u *UDSConn) Send(frame Frame) error {
 	if u == nil || u.sendCh == nil {
 		return io.ErrClosedPipe
@@ -47,6 +49,17 @@ func (u *UDSConn) Send(frame Frame) error {
 		return io.EOF
 	case u.sendCh <- frame:
 		return nil
+	}
+}
+
+// Flush 强制立即写出缓冲区中所有待发送帧，用于对延迟敏感的消息（如握手响应）。
+func (u *UDSConn) Flush() {
+	if u == nil || u.flushCh == nil {
+		return
+	}
+	select {
+	case u.flushCh <- struct{}{}:
+	default:
 	}
 }
 
@@ -116,7 +129,7 @@ func (u *UDSConn) writeLoop() {
 
 // NewTestUDSConn 创建用于集成测试的 UDS 连接（公开 sendCh/recvCh）
 func NewTestUDSConn(remoteAddr string) *UDSConn {
-	ch := make(chan Frame, 64)
+	ch := make(chan Frame, 4096)
 	return &UDSConn{
 		remoteAddr: remoteAddr,
 		sendCh:     ch,

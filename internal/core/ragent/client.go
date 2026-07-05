@@ -62,7 +62,7 @@ func (c *Client) Connect() error {
 
 	c.mu.Lock()
 	c.conn = raw
-	c.sendCh = make(chan routeragent.Frame, 64)
+	c.sendCh = make(chan routeragent.Frame, 4096)
 	c.done = make(chan struct{})
 	c.mu.Unlock()
 

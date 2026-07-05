@@ -15,7 +15,7 @@ import (
 
 const (
 	peerDialTimeout  = 3 * time.Second
-	peerPendingLimit = 8192
+	peerPendingLimit = 65536
 )
 
 var errPeerQueueFull = errors.New("peer pending queue full")
@@ -326,6 +326,9 @@ func (m *Module) dialPeerConn(addr string) (*tcpPeerLink, string, error) {
 		m.metrics.PeerConnectFailTotal.Add(1)
 		return nil, "", err
 	}
+	if tcp, ok := conn.(*net.TCPConn); ok {
+		_ = tcp.SetNoDelay(true)
+	}
 	_ = conn.SetDeadline(time.Now().Add(peerDialTimeout))
 	logger.Info("routeragent peer tcp connected", logger.String("peer_addr", addr), logger.String("local_addr", conn.LocalAddr().String()), logger.String("remote_addr", conn.RemoteAddr().String()))
 
@@ -368,7 +371,7 @@ func (m *Module) dialPeerConn(addr string) (*tcpPeerLink, string, error) {
 	_ = conn.SetDeadline(time.Time{})
 	peerListenAddr := string(peerAddrBuf)
 	logger.Info("routeragent peer handshake receive done", logger.String("peer_addr", addr), logger.String("peer_listen_addr", peerListenAddr), logger.String("listen_addr", listenAddr))
-	pl := &tcpPeerLink{conn: conn, addr: peerListenAddr, sendCh: make(chan Frame, 64), done: make(chan struct{})}
+	pl := &tcpPeerLink{conn: conn, addr: peerListenAddr, sendCh: make(chan Frame, 16384), done: make(chan struct{})}
 	return pl, peerListenAddr, nil
 }
 

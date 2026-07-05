@@ -27,7 +27,7 @@
 | `pkg/` | 可复用公共库 | `pkg/CLAUDE.md` |
 | `tools/` | Go 开发工具与生成器 | `tools/CLAUDE.md` |
 | `scripts/` | 构建、配置烘焙、协议生成脚本入口 | `scripts/CLAUDE.md` |
-| `docs/` | 设计文档、命名规则、TODO 记录 | `docs/框架核心.md` |
+| `docs/` | 设计文档、命名规则、TODO 记录 | `docs/框架核心.md`, `docs/路由代理：性能优化.md` |
 | `other_projects/` | 独立参考项目 | `other_projects/CLAUDE.md` |
 
 ## 当前项目概览

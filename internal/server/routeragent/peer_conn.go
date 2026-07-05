@@ -1,6 +1,7 @@
 package routeragent
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"io"
@@ -16,6 +17,9 @@ func (m *Module) handleIncomingPeer(conn net.Conn, listenAddr string) {
 	addr := conn.RemoteAddr().String()
 	logger.Info("routeragent peer incoming accepted", logger.String("remote_addr", addr), logger.String("listen_addr", listenAddr))
 	defer conn.Close()
+	if tcp, ok := conn.(*net.TCPConn); ok {
+		_ = tcp.SetNoDelay(true)
+	}
 
 	// 接收对端 Handshake（包含对端 listen address）
 	buf := make([]byte, 2)
@@ -49,7 +53,7 @@ func (m *Module) handleIncomingPeer(conn net.Conn, listenAddr string) {
 	}
 
 	// 包装为 PeerLink。若双边同时建连，新连接会替换旧连接并主动关闭旧连接，避免残留双连接。
-	pl := &tcpPeerLink{conn: conn, addr: peerListenAddr, sendCh: make(chan Frame, 64), done: make(chan struct{})}
+	pl := &tcpPeerLink{conn: conn, addr: peerListenAddr, sendCh: make(chan Frame, 16384), done: make(chan struct{})}
 	old, replaced, pending := m.peerMgr.Attach(peerListenAddr, pl, "incoming")
 	if replaced {
 		logger.Warn("routeragent peer replaced old connection", logger.String("direction", "incoming"), logger.String("peer_listen_addr", peerListenAddr), logger.String("listen_addr", listenAddr))
@@ -153,7 +157,10 @@ func (l *tcpPeerLink) Close() error {
 	return err
 }
 
+const tcpWriteBatchMaxFrames = 16
+
 func (l *tcpPeerLink) writeLoop(done <-chan struct{}) {
+	var buf bytes.Buffer
 	for {
 		select {
 		case <-done:
@@ -162,10 +169,22 @@ func (l *tcpPeerLink) writeLoop(done <-chan struct{}) {
 			return
 		case f := <-l.sendCh:
 			data, _ := EncodeFrame(f)
-			if _, err := l.conn.Write(data); err != nil {
+			buf.Write(data)
+			for drained := 1; drained < tcpWriteBatchMaxFrames; drained++ {
+				select {
+				case f2 := <-l.sendCh:
+					data2, _ := EncodeFrame(f2)
+					buf.Write(data2)
+				default:
+					goto flushNow
+				}
+			}
+		flushNow:
+			if _, err := l.conn.Write(buf.Bytes()); err != nil {
 				l.Close()
 				return
 			}
+			buf.Reset()
 		}
 	}
 }
@@ -219,7 +238,7 @@ func NewTCPPeerLink(conn interface{}, addr string) PeerLink {
 	pl := &tcpPeerLink{
 		conn:   &adaptNetConn{c: c},
 		addr:   addr,
-		sendCh: make(chan Frame, 64),
+		sendCh: make(chan Frame, 16384),
 		done:   make(chan struct{}),
 	}
 	go pl.writeLoop(make(chan struct{}))
