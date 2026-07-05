@@ -86,6 +86,7 @@ func (m *Module) handleIncomingPeer(conn net.Conn, listenAddr string) {
 	close(writeDone)
 
 	if m.peerMgr.Detach(peerKey, pl) {
+		m.cleanupIncomingPeerSeqByPeer(peerKey)
 		m.metrics.PeerDisconnectTotal.Add(1)
 		logger.Warn("routeragent peer disconnected", logger.String("direction", "incoming"), logger.String("peer_key", peerKey), logger.String("remote_addr", addr))
 	}
@@ -106,7 +107,6 @@ func (m *Module) handlePeerFrame(f Frame, peerKey string) {
 		} else {
 			m.metrics.LateResponse.Add(1)
 		}
-		m.metrics.RemoteSeqPending.Add(-1)
 		m.metrics.ForwardTotal.Add(1)
 	case FrameRpcRequest, FrameRpcNotify:
 		m.metrics.ForwardTotal.Add(1)
@@ -123,9 +123,9 @@ func (m *Module) handlePeerFrame(f Frame, peerKey string) {
 			}
 			nodeID = parsed
 		}
-		m.incomingPeerSeqMu.Lock()
-		m.incomingPeerSeq[head.SeqID] = peerKey
-		m.incomingPeerSeqMu.Unlock()
+		if f.Type == FrameRpcRequest {
+			m.trackIncomingPeerSeq(head.SeqID, peerKey)
+		}
 		m.deliverToLocal(nodeID, f)
 	}
 }

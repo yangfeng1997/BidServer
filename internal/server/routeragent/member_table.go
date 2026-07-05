@@ -72,5 +72,8 @@ func (m *MemberTable) GetByNodeID(id uint32) (NodeInfo, bool) {
 func (m *MemberTable) ListByServerType(serverType uint32) []NodeInfo {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.byServerType[serverType]
+	items := m.byServerType[serverType]
+	out := make([]NodeInfo, len(items))
+	copy(out, items)
+	return out
 }

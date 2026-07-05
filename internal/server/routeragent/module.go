@@ -17,9 +17,16 @@ import (
 )
 
 const (
-	moduleName      = "routeragent"
-	defaultSockPath = "/run/routeragent/ra.sock"
+	moduleName                  = "routeragent"
+	defaultSockPath             = "/run/routeragent/ra.sock"
+	incomingPeerSeqRetention    = 10 * time.Second
+	incomingPeerSeqCleanupEvery = time.Second
 )
+
+type incomingPeerSeqEntry struct {
+	peerKey string
+	at      time.Time
+}
 
 // routeragent 业务模块
 type Module struct {
@@ -47,25 +54,25 @@ type Module struct {
 	metrics   *Metrics
 
 	incomingPeerSeqMu sync.Mutex
-	incomingPeerSeq   map[uint64]string // seqID → peerKey of the peer connection that delivered the request
+	incomingPeerSeq   map[uint64]incomingPeerSeqEntry // seqID -> peer connection that delivered the request
 }
 
 // NewModule 创建 routeragent 模块
 func NewModule() *Module {
 	m := &Module{
-		ready:       app.NewReady(),
-		sockPath:    defaultSockPath,
-		memberTable: NewMemberTable(),
-		peerMgr:     NewPeerMgr(),
-		resolver:    NewResolver(),
-		keepalive:   NewKeepAlive(5*time.Second, 10*time.Second),
-		stopCh:      make(chan struct{}),
-		localConns:  make(map[uint32]*UDSConn),
-		waiters:     make(map[uint64]*BroadcastWaiter),
-		remoteSeq:   NewRemoteSeqMap(),
-		metrics:     NewMetrics(),
-		incomingPeerSeq: make(map[uint64]string),
+		ready:           app.NewReady(),
+		sockPath:        defaultSockPath,
+		memberTable:     NewMemberTable(),
+		peerMgr:         NewPeerMgr(),
+		resolver:        NewResolver(),
+		keepalive:       NewKeepAlive(5*time.Second, 10*time.Second),
+		stopCh:          make(chan struct{}),
+		localConns:      make(map[uint32]*UDSConn),
+		waiters:         make(map[uint64]*BroadcastWaiter),
+		metrics:         NewMetrics(),
+		incomingPeerSeq: make(map[uint64]incomingPeerSeqEntry),
 	}
+	m.remoteSeq = NewRemoteSeqMap(&m.metrics.RemoteSeqPending)
 	if cfg := RouteragentConfig(); cfg != nil {
 		m.ApplyConfig(cfg.SockPath, cfg.ListenAddr, cfg.HeartbeatSec)
 	}
@@ -124,6 +131,7 @@ func (m *Module) AfterInit() error {
 	go m.udsServer.Serve(m.stopCh)
 	logger.Info("routeragent keepalive start")
 	go m.keepalive.Run(m.stopCh)
+	go m.runIncomingPeerSeqCleanup(m.stopCh)
 
 	if m.registry != nil {
 		serverType := uint32(common.ServerType_ST_ROUTERAGENT)
@@ -378,18 +386,63 @@ func (m *Module) sendResponseViaPeer(seqID uint64, destNodeID uint32, frame Fram
 		return
 	}
 	m.incomingPeerSeqMu.Lock()
-	peerKey, has := m.incomingPeerSeq[seqID]
+	entry, has := m.incomingPeerSeq[seqID]
 	if has {
 		delete(m.incomingPeerSeq, seqID)
 	}
 	m.incomingPeerSeqMu.Unlock()
 	if has {
-		if snap := m.peerMgr.getLink(peerKey); snap.state == PeerConnected && snap.link != nil {
+		if snap := m.peerMgr.getLink(entry.peerKey); snap.state == PeerConnected && snap.link != nil {
 			_ = snap.link.Send(frame)
 			return
 		}
 	}
 	_ = m.sendPeerOrQueue(info.RAAddr, 0, peerOutbound{frame: frame})
+}
+
+func (m *Module) trackIncomingPeerSeq(seqID uint64, peerKey string) {
+	if seqID == 0 || peerKey == "" {
+		return
+	}
+	m.incomingPeerSeqMu.Lock()
+	m.incomingPeerSeq[seqID] = incomingPeerSeqEntry{peerKey: peerKey, at: time.Now()}
+	m.incomingPeerSeqMu.Unlock()
+}
+
+func (m *Module) cleanupIncomingPeerSeq(now time.Time) {
+	m.incomingPeerSeqMu.Lock()
+	for seqID, entry := range m.incomingPeerSeq {
+		if now.Sub(entry.at) > incomingPeerSeqRetention {
+			delete(m.incomingPeerSeq, seqID)
+		}
+	}
+	m.incomingPeerSeqMu.Unlock()
+}
+
+func (m *Module) cleanupIncomingPeerSeqByPeer(peerKey string) {
+	if peerKey == "" {
+		return
+	}
+	m.incomingPeerSeqMu.Lock()
+	for seqID, entry := range m.incomingPeerSeq {
+		if entry.peerKey == peerKey {
+			delete(m.incomingPeerSeq, seqID)
+		}
+	}
+	m.incomingPeerSeqMu.Unlock()
+}
+
+func (m *Module) runIncomingPeerSeqCleanup(stop <-chan struct{}) {
+	ticker := time.NewTicker(incomingPeerSeqCleanupEvery)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-stop:
+			return
+		case now := <-ticker.C:
+			m.cleanupIncomingPeerSeq(now)
+		}
+	}
 }
 
 func (m *Module) registerConn(nodeID uint32, c *UDSConn) {
