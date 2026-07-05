@@ -1,6 +1,7 @@
 package routeragent
 
 import (
+	"bytes"
 	"encoding/binary"
 	"io"
 	"net"
@@ -78,38 +79,42 @@ func (u *UDSConn) Close() error {
 
 func (u *UDSConn) readLoop() {
 	defer close(u.recvCh)
-	hdr := make([]byte, 4)
+	buf := make([]byte, 0, 65536)
+	tmp := make([]byte, 32768)
 	for {
-		if _, err := io.ReadFull(u.conn, hdr); err != nil {
-			_ = u.Close()
-			return
-		}
-		length := int(binary.BigEndian.Uint32(hdr))
-		if length < 3 {
-			_ = u.Close()
-			return
-		}
-		buf := make([]byte, length)
-		if _, err := io.ReadFull(u.conn, buf); err != nil {
-			_ = u.Close()
-			return
-		}
-		data := make([]byte, 4+length)
-		copy(data[:4], hdr)
-		copy(data[4:], buf)
-		frame, err := DecodeFrame(data)
+		n, err := u.conn.Read(tmp)
 		if err != nil {
-			continue
-		}
-		select {
-		case u.recvCh <- frame:
-		case <-u.done:
+			_ = u.Close()
 			return
+		}
+		buf = append(buf, tmp[:n]...)
+		for len(buf) >= 4 {
+			length := int(binary.BigEndian.Uint32(buf[:4]))
+			if length < 3 {
+				_ = u.Close()
+				return
+			}
+			total := 4 + length
+			if len(buf) < total {
+				break
+			}
+			frame, err := DecodeFrame(buf[:total])
+			if err == nil {
+				select {
+				case u.recvCh <- frame:
+				case <-u.done:
+					return
+				}
+			}
+			buf = buf[total:]
 		}
 	}
 }
 
+const udsWriteBatchMaxFrames = 16
+
 func (u *UDSConn) writeLoop() {
+	var buf bytes.Buffer
 	for {
 		select {
 		case <-u.done:
@@ -119,10 +124,22 @@ func (u *UDSConn) writeLoop() {
 			if err != nil {
 				continue
 			}
-			if _, err := u.conn.Write(data); err != nil {
+			buf.Write(data)
+			for drained := 1; drained < udsWriteBatchMaxFrames; drained++ {
+				select {
+				case f2 := <-u.sendCh:
+					d2, _ := EncodeFrame(f2)
+					buf.Write(d2)
+				default:
+					goto flushNow
+				}
+			}
+		flushNow:
+			if _, err := u.conn.Write(buf.Bytes()); err != nil {
 				_ = u.Close()
 				return
 			}
+			buf.Reset()
 		}
 	}
 }
