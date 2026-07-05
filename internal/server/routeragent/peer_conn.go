@@ -41,11 +41,23 @@ func (m *Module) handleIncomingPeer(conn net.Conn, listenAddr string) {
 	peerListenAddr := string(peerAddr)
 	logger.Info("routeragent peer incoming handshake receive done", logger.String("remote_addr", addr), logger.String("peer_listen_addr", peerListenAddr), logger.String("listen_addr", listenAddr))
 
+	// 读取对端 serverType（握手格式：2B len + addr + 4B serverType）
+	serverType := uint32(0)
+	stBuf := make([]byte, 4)
+	if _, err := io.ReadFull(conn, stBuf); err != nil {
+		logger.Warn("routeragent peer incoming handshake serverType read failed, using 0", logger.String("remote_addr", addr), logger.Err(err))
+	} else {
+		serverType = binary.BigEndian.Uint32(stBuf)
+	}
+	peerKey := peerKey(peerListenAddr, serverType)
+	logger.Info("routeragent peer incoming handshake serverType", logger.String("remote_addr", addr), logger.Uint32("server_type", serverType), logger.String("peer_key", peerKey))
+
 	// 发送本端 Handshake
-	hsBuf := make([]byte, 2+len(listenAddr))
+	hsBuf := make([]byte, 2+len(listenAddr)+4)
 	binary.BigEndian.PutUint16(hsBuf[:2], uint16(len(listenAddr)))
-	copy(hsBuf[2:], listenAddr)
-	logger.Info("routeragent peer incoming handshake send", logger.String("remote_addr", addr), logger.String("listen_addr", listenAddr))
+	copy(hsBuf[2:2+len(listenAddr)], listenAddr)
+	// serverType=0 已零值
+	logger.Info("routeragent peer incoming handshake send", logger.String("remote_addr", addr), logger.String("listen_addr", listenAddr), logger.String("peer_key", peerKey))
 	if _, err := conn.Write(hsBuf); err != nil {
 		logger.Error("routeragent peer incoming handshake send failed", logger.String("remote_addr", addr), logger.String("listen_addr", listenAddr), logger.Err(err))
 		m.metrics.PeerConnectFailTotal.Add(1)
@@ -54,33 +66,33 @@ func (m *Module) handleIncomingPeer(conn net.Conn, listenAddr string) {
 
 	// 包装为 PeerLink。若双边同时建连，新连接会替换旧连接并主动关闭旧连接，避免残留双连接。
 	pl := &tcpPeerLink{conn: conn, addr: peerListenAddr, sendCh: make(chan Frame, 16384), done: make(chan struct{})}
-	old, replaced, pending := m.peerMgr.Attach(peerListenAddr, pl, "incoming")
+	old, replaced, pending := m.peerMgr.Attach(peerKey, pl, "incoming")
 	if replaced {
-		logger.Warn("routeragent peer replaced old connection", logger.String("direction", "incoming"), logger.String("peer_listen_addr", peerListenAddr), logger.String("listen_addr", listenAddr))
+		logger.Warn("routeragent peer replaced old connection", logger.String("direction", "incoming"), logger.String("peer_key", peerKey), logger.String("listen_addr", listenAddr))
 		m.metrics.PeerDisconnectTotal.Add(1)
 		_ = old.Close()
 	}
 	m.metrics.PeerConnectTotal.Add(1)
-	logger.Info("routeragent peer connected", logger.String("direction", "incoming"), logger.String("remote_addr", addr), logger.String("peer_listen_addr", peerListenAddr), logger.String("listen_addr", listenAddr), logger.Int("pending", len(pending)))
+	logger.Info("routeragent peer connected", logger.String("direction", "incoming"), logger.String("remote_addr", addr), logger.String("peer_key", peerKey), logger.String("listen_addr", listenAddr), logger.Int("pending", len(pending)))
 	writeDone := make(chan struct{})
 	go pl.writeLoop(writeDone)
 	m.flushPeerPending(pl, pending)
 
 	pl.readLoop(func(f Frame) {
 		m.post(func() {
-			m.handlePeerFrame(f)
+			m.handlePeerFrame(f, peerKey)
 		})
 	})
 	close(writeDone)
 
-	if m.peerMgr.Detach(peerListenAddr, pl) {
+	if m.peerMgr.Detach(peerKey, pl) {
 		m.metrics.PeerDisconnectTotal.Add(1)
-		logger.Warn("routeragent peer disconnected", logger.String("direction", "incoming"), logger.String("peer_listen_addr", peerListenAddr), logger.String("remote_addr", addr))
+		logger.Warn("routeragent peer disconnected", logger.String("direction", "incoming"), logger.String("peer_key", peerKey), logger.String("remote_addr", addr))
 	}
 }
 
 // handlePeerFrame 处理从远端 peer 收到的帧
-func (m *Module) handlePeerFrame(f Frame) {
+func (m *Module) handlePeerFrame(f Frame, peerKey string) {
 	switch f.Type {
 	case FrameRpcResponse:
 		head, err := DecodeRPCWireHeader(f.Header)
@@ -111,6 +123,9 @@ func (m *Module) handlePeerFrame(f Frame) {
 			}
 			nodeID = parsed
 		}
+		m.incomingPeerSeqMu.Lock()
+		m.incomingPeerSeq[head.SeqID] = peerKey
+		m.incomingPeerSeqMu.Unlock()
 		m.deliverToLocal(nodeID, f)
 	}
 }
@@ -190,34 +205,35 @@ func (l *tcpPeerLink) writeLoop(done <-chan struct{}) {
 }
 
 func (l *tcpPeerLink) readLoop(onFrame func(Frame)) {
+	buf := make([]byte, 0, 65536)
+	tmp := make([]byte, 32768)
 	for {
-		lenBuf := make([]byte, 4)
-		if _, err := io.ReadFull(l.conn, lenBuf); err != nil {
-			l.Close()
-			return
-		}
-		length := int(binary.BigEndian.Uint32(lenBuf))
-		if length < 3 || length > 16*1024*1024 {
-			continue
-		}
-		buf := make([]byte, length)
-		if _, err := io.ReadFull(l.conn, buf); err != nil {
-			l.Close()
-			return
-		}
-		data := make([]byte, 4+length)
-		copy(data[:4], lenBuf)
-		copy(data[4:], buf)
-		f, err := DecodeFrame(data)
+		n, err := l.conn.Read(tmp)
 		if err != nil {
-			continue
+			l.Close()
+			return
 		}
-		// 心跳
-		if f.Type == FrameHeartbeat {
-			l.Send(Frame{Type: FrameHeartbeat})
-			continue
+		buf = append(buf, tmp[:n]...)
+		for len(buf) >= 4 {
+			length := int(binary.BigEndian.Uint32(buf[:4]))
+			if length < 3 || length > 16*1024*1024 {
+				l.Close()
+				return
+			}
+			total := 4 + length
+			if len(buf) < total {
+				break
+			}
+			f, err := DecodeFrame(buf[:total])
+			if err == nil {
+				if f.Type == FrameHeartbeat {
+					l.Send(Frame{Type: FrameHeartbeat})
+				} else {
+					onFrame(f)
+				}
+			}
+			buf = buf[total:]
 		}
-		onFrame(f)
 	}
 }
 

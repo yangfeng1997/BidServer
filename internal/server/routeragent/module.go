@@ -45,6 +45,9 @@ type Module struct {
 	waiterSeq atomic.Uint64
 	remoteSeq *RemoteSeqMap
 	metrics   *Metrics
+
+	incomingPeerSeqMu sync.Mutex
+	incomingPeerSeq   map[uint64]string // seqID → peerKey of the peer connection that delivered the request
 }
 
 // NewModule 创建 routeragent 模块
@@ -61,6 +64,7 @@ func NewModule() *Module {
 		waiters:     make(map[uint64]*BroadcastWaiter),
 		remoteSeq:   NewRemoteSeqMap(),
 		metrics:     NewMetrics(),
+		incomingPeerSeq: make(map[uint64]string),
 	}
 	if cfg := RouteragentConfig(); cfg != nil {
 		m.ApplyConfig(cfg.SockPath, cfg.ListenAddr, cfg.HeartbeatSec)
@@ -257,7 +261,7 @@ func (m *Module) routeFrame(c *UDSConn, frame Frame) {
 	switch frame.Type {
 	case FrameRpcResponse:
 		if head.DestNodeID != 0 {
-			_ = m.sendToNode(head.DestNodeID, frame)
+			m.sendResponseViaPeer(head.SeqID, head.DestNodeID, frame)
 			return
 		}
 		entry := m.remoteSeq.Pop(head.SeqID)
@@ -292,7 +296,7 @@ func (m *Module) forwardRPC(c *UDSConn, frame Frame, head RPCWireHeader) {
 			_ = local.Send(out)
 			continue
 		}
-		_ = m.sendPeerOrQueue(info.RAAddr, peerOutbound{
+		_ = m.sendPeerOrQueue(info.RAAddr, head.ServerType, peerOutbound{
 			source:       c,
 			frame:        frame,
 			head:         head,
@@ -349,7 +353,7 @@ func (m *Module) routeLegacyFrame(c *UDSConn, frame Frame) {
 		_ = local.Send(frame)
 		return
 	}
-	_ = m.sendPeerOrQueue(info.RAAddr, peerOutbound{frame: Frame{Type: frame.Type, Body: EncodeRouteBody(nodeID, payload)}})
+	_ = m.sendPeerOrQueue(info.RAAddr, 0, peerOutbound{frame: Frame{Type: frame.Type, Body: EncodeRouteBody(nodeID, payload)}})
 }
 
 func (m *Module) sendToNode(nodeID uint32, frame Frame) error {
@@ -360,7 +364,28 @@ func (m *Module) sendToNode(nodeID uint32, frame Frame) error {
 	if !ok {
 		return errors.New("node not found")
 	}
-	return m.sendPeerOrQueue(info.RAAddr, peerOutbound{frame: frame})
+	return m.sendPeerOrQueue(info.RAAddr, 0, peerOutbound{frame: frame})
+}
+
+// sendResponseViaPeer 将应答通过原请求进入的 peer 连接送回，避免创建多余连接。
+func (m *Module) sendResponseViaPeer(seqID uint64, destNodeID uint32, frame Frame) {
+	info, ok := m.memberTable.GetByNodeID(destNodeID)
+	if !ok {
+		return
+	}
+	m.incomingPeerSeqMu.Lock()
+	peerKey, has := m.incomingPeerSeq[seqID]
+	if has {
+		delete(m.incomingPeerSeq, seqID)
+	}
+	m.incomingPeerSeqMu.Unlock()
+	if has {
+		if snap := m.peerMgr.getLink(peerKey); snap.state == PeerConnected && snap.link != nil {
+			_ = snap.link.Send(frame)
+			return
+		}
+	}
+	_ = m.sendPeerOrQueue(info.RAAddr, 0, peerOutbound{frame: frame})
 }
 
 func (m *Module) registerConn(nodeID uint32, c *UDSConn) {

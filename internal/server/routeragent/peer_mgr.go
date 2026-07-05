@@ -20,6 +20,10 @@ const (
 
 var errPeerQueueFull = errors.New("peer pending queue full")
 
+func peerKey(addr string, serverType uint32) string {
+	return fmt.Sprintf("%s:%d", addr, serverType)
+}
+
 // PeerLink 表示一个可发送帧的 peer 连接
 type PeerLink interface {
 	Send(Frame) error
@@ -199,26 +203,27 @@ func (m *PeerMgr) List() []*PeerInfo {
 	return out
 }
 
-func (m *Module) sendPeerOrQueue(addr string, item peerOutbound) error {
+func (m *Module) sendPeerOrQueue(addr string, serverType uint32, item peerOutbound) error {
 	if addr == "" {
 		m.failOutbound(item, errcode.ERR_NO_ROUTE)
 		return errors.New("peer addr is empty")
 	}
-	if snap := m.peerMgr.getLink(addr); snap.state == PeerConnected && snap.link != nil {
+	key := peerKey(addr, serverType)
+	if snap := m.peerMgr.getLink(key); snap.state == PeerConnected && snap.link != nil {
 		if err := m.sendPeerOutbound(snap.link, item); err == nil {
 			return nil
 		} else {
-			logger.Warn("routeragent peer send failed, queue and reconnect", logger.String("peer_addr", addr), logger.Err(err))
+			logger.Warn("routeragent peer send failed, queue and reconnect", logger.String("peer_key", key), logger.Err(err))
 		}
 	}
-	startDial, err := m.peerMgr.enqueue(addr, item)
+	startDial, err := m.peerMgr.enqueue(key, item)
 	if err != nil {
-		logger.Error("routeragent peer enqueue failed", logger.String("peer_addr", addr), logger.Err(err))
+		logger.Error("routeragent peer enqueue failed", logger.String("peer_key", key), logger.Err(err))
 		m.failOutbound(item, errcode.ERR_INTERNAL)
 		return err
 	}
 	if startDial {
-		m.startDialPeer(addr)
+		m.startDialPeer(addr, serverType)
 	}
 	return nil
 }
@@ -265,27 +270,29 @@ func (m *Module) failOutbound(item peerOutbound, code errcode.ErrCode) {
 	_ = item.source.Send(Frame{Type: FrameRpcResponse, Header: EncodeRPCWireHeader(head)})
 }
 
-func (m *Module) startDialPeer(addr string) {
-	logger.Info("routeragent peer async dial scheduled", logger.String("peer_addr", addr))
+func (m *Module) startDialPeer(addr string, serverType uint32) {
+	key := peerKey(addr, serverType)
+	logger.Info("routeragent peer async dial scheduled", logger.String("peer_addr", addr), logger.Uint32("server_type", serverType))
 	go func() {
-		pl, peerListenAddr, err := m.dialPeerConn(addr)
+		pl, peerListenAddr, err := m.dialPeerConn(addr, serverType)
 		m.post(func() {
 			if err != nil {
-				pending := m.peerMgr.failPending(addr)
+				pending := m.peerMgr.failPending(key)
 				for _, item := range pending {
 					m.failOutbound(item, errcode.ERR_INTERNAL)
 				}
 				return
 			}
-			old, replaced, pending := m.peerMgr.Attach(peerListenAddr, pl, "outgoing")
+			peerKey := peerKey(peerListenAddr, serverType)
+			old, replaced, pending := m.peerMgr.Attach(peerKey, pl, "outgoing")
 			if replaced {
-				logger.Warn("routeragent peer replaced old connection", logger.String("direction", "outgoing"), logger.String("peer_listen_addr", peerListenAddr), logger.String("listen_addr", m.peerMgr.listenAddr))
+				logger.Warn("routeragent peer replaced old connection", logger.String("direction", "outgoing"), logger.String("peer_key", peerKey), logger.String("listen_addr", m.peerMgr.listenAddr))
 				m.metrics.PeerDisconnectTotal.Add(1)
 				_ = old.Close()
 			}
 			m.metrics.PeerConnectTotal.Add(1)
-			logger.Info("routeragent peer connected", logger.String("direction", "outgoing"), logger.String("peer_addr", addr), logger.String("peer_listen_addr", peerListenAddr), logger.String("listen_addr", m.peerMgr.listenAddr), logger.Int("pending", len(pending)))
-			m.startPeerLoops(pl, peerListenAddr, "outgoing", addr)
+			logger.Info("routeragent peer connected", logger.String("direction", "outgoing"), logger.String("peer_key", peerKey), logger.Int("pending", len(pending)))
+			m.startPeerLoops(pl, peerKey, "outgoing", peerKey)
 			m.flushPeerPending(pl, pending)
 		})
 	}()
@@ -293,36 +300,39 @@ func (m *Module) startDialPeer(addr string) {
 
 // 连接到远端 RA。保留给集成测试和手工调用；主路由路径使用异步 sendPeerOrQueue。
 func (m *Module) DialPeer(addr string) error {
-	pl, peerListenAddr, err := m.dialPeerConn(addr)
+	serverType := uint32(0)
+	pl, peerListenAddr, err := m.dialPeerConn(addr, serverType)
 	if err != nil {
 		return err
 	}
-	old, replaced, pending := m.peerMgr.Attach(peerListenAddr, pl, "outgoing")
+	peerKey := peerKey(peerListenAddr, serverType)
+	old, replaced, pending := m.peerMgr.Attach(peerKey, pl, "outgoing")
 	if replaced {
-		logger.Warn("routeragent peer replaced old connection", logger.String("direction", "outgoing"), logger.String("peer_listen_addr", peerListenAddr), logger.String("listen_addr", m.peerMgr.listenAddr))
+		logger.Warn("routeragent peer replaced old connection", logger.String("direction", "outgoing"), logger.String("peer_key", peerKey), logger.String("listen_addr", m.peerMgr.listenAddr))
 		m.metrics.PeerDisconnectTotal.Add(1)
 		_ = old.Close()
 	}
 	m.metrics.PeerConnectTotal.Add(1)
-	logger.Info("routeragent peer connected", logger.String("direction", "outgoing"), logger.String("peer_addr", addr), logger.String("peer_listen_addr", peerListenAddr), logger.String("listen_addr", m.peerMgr.listenAddr))
-	m.startPeerLoops(pl, peerListenAddr, "outgoing", addr)
+	logger.Info("routeragent peer connected", logger.String("direction", "outgoing"), logger.String("peer_key", peerKey), logger.String("listen_addr", m.peerMgr.listenAddr))
+	m.startPeerLoops(pl, peerKey, "outgoing", peerKey)
 	m.flushPeerPending(pl, pending)
 	return nil
 }
 
-func (m *Module) dialPeerConn(addr string) (*tcpPeerLink, string, error) {
+func (m *Module) dialPeerConn(addr string, serverType uint32) (*tcpPeerLink, string, error) {
 	if addr == "" {
 		logger.Warn("routeragent peer dial skipped: empty addr")
 		return nil, "", errors.New("peer addr is empty")
 	}
 	listenAddr := m.peerMgr.listenAddr
-	logger.Info("routeragent peer dial start", logger.String("peer_addr", addr), logger.String("listen_addr", listenAddr))
-	m.peerMgr.SetState(addr, PeerConnecting)
+	key := peerKey(addr, serverType)
+	logger.Info("routeragent peer dial start", logger.String("peer_addr", addr), logger.Uint32("server_type", serverType), logger.String("listen_addr", listenAddr))
+	m.peerMgr.SetState(key, PeerConnecting)
 	dialer := net.Dialer{Timeout: peerDialTimeout}
 	conn, err := dialer.Dial("tcp", addr)
 	if err != nil {
-		logger.Error("routeragent peer dial failed", logger.String("peer_addr", addr), logger.String("listen_addr", listenAddr), logger.Err(err))
-		m.peerMgr.SetState(addr, PeerDisconnected)
+		logger.Error("routeragent peer dial failed", logger.String("peer_addr", addr), logger.Uint32("server_type", serverType), logger.String("listen_addr", listenAddr), logger.Err(err))
+		m.peerMgr.SetState(key, PeerDisconnected)
 		m.metrics.PeerConnectFailTotal.Add(1)
 		return nil, "", err
 	}
@@ -332,14 +342,15 @@ func (m *Module) dialPeerConn(addr string) (*tcpPeerLink, string, error) {
 	_ = conn.SetDeadline(time.Now().Add(peerDialTimeout))
 	logger.Info("routeragent peer tcp connected", logger.String("peer_addr", addr), logger.String("local_addr", conn.LocalAddr().String()), logger.String("remote_addr", conn.RemoteAddr().String()))
 
-	hsBuf := make([]byte, 2+len(listenAddr))
+	hsBuf := make([]byte, 2+len(listenAddr)+4)
 	binary.BigEndian.PutUint16(hsBuf[:2], uint16(len(listenAddr)))
-	copy(hsBuf[2:], listenAddr)
-	logger.Info("routeragent peer handshake send", logger.String("peer_addr", addr), logger.String("listen_addr", listenAddr))
+	copy(hsBuf[2:2+len(listenAddr)], listenAddr)
+	binary.BigEndian.PutUint32(hsBuf[2+len(listenAddr):], serverType)
+	logger.Info("routeragent peer handshake send", logger.String("peer_addr", addr), logger.String("listen_addr", listenAddr), logger.Uint32("server_type", serverType))
 	if _, err := conn.Write(hsBuf); err != nil {
 		logger.Error("routeragent peer handshake send failed", logger.String("peer_addr", addr), logger.String("listen_addr", listenAddr), logger.Err(err))
 		_ = conn.Close()
-		m.peerMgr.SetState(addr, PeerDisconnected)
+		m.peerMgr.SetState(key, PeerDisconnected)
 		m.metrics.PeerConnectFailTotal.Add(1)
 		return nil, "", err
 	}
@@ -349,7 +360,7 @@ func (m *Module) dialPeerConn(addr string) (*tcpPeerLink, string, error) {
 	if _, err := io.ReadFull(conn, buf); err != nil {
 		logger.Error("routeragent peer handshake receive header failed", logger.String("peer_addr", addr), logger.Err(err))
 		_ = conn.Close()
-		m.peerMgr.SetState(addr, PeerDisconnected)
+		m.peerMgr.SetState(key, PeerDisconnected)
 		m.metrics.PeerConnectFailTotal.Add(1)
 		return nil, "", err
 	}
@@ -357,19 +368,22 @@ func (m *Module) dialPeerConn(addr string) (*tcpPeerLink, string, error) {
 	if peerAddrLen > 256 || peerAddrLen <= 0 {
 		logger.Warn("routeragent peer handshake invalid addr length", logger.String("peer_addr", addr), logger.Int("addr_len", peerAddrLen))
 		_ = conn.Close()
-		m.peerMgr.SetState(addr, PeerDisconnected)
+		m.peerMgr.SetState(key, PeerDisconnected)
 		return nil, "", errors.New("invalid peer addr length")
 	}
 	peerAddrBuf := make([]byte, peerAddrLen)
 	if _, err := io.ReadFull(conn, peerAddrBuf); err != nil {
 		logger.Error("routeragent peer handshake receive addr failed", logger.String("peer_addr", addr), logger.Int("addr_len", peerAddrLen), logger.Err(err))
 		_ = conn.Close()
-		m.peerMgr.SetState(addr, PeerDisconnected)
+		m.peerMgr.SetState(key, PeerDisconnected)
 		m.metrics.PeerConnectFailTotal.Add(1)
 		return nil, "", err
 	}
 	_ = conn.SetDeadline(time.Time{})
 	peerListenAddr := string(peerAddrBuf)
+	// 读取对端回握手中的 serverType（被动端固定回 0）
+	stResp := make([]byte, 4)
+	io.ReadFull(conn, stResp)
 	logger.Info("routeragent peer handshake receive done", logger.String("peer_addr", addr), logger.String("peer_listen_addr", peerListenAddr), logger.String("listen_addr", listenAddr))
 	pl := &tcpPeerLink{conn: conn, addr: peerListenAddr, sendCh: make(chan Frame, 16384), done: make(chan struct{})}
 	return pl, peerListenAddr, nil
@@ -389,13 +403,13 @@ func (m *Module) startPeerLoops(pl *tcpPeerLink, peerListenAddr string, directio
 		go pl.writeLoop(writeDone)
 		pl.readLoop(func(f Frame) {
 			m.post(func() {
-				m.handlePeerFrame(f)
+				m.handlePeerFrame(f, peerListenAddr)
 			})
 		})
 		close(writeDone)
 		if m.peerMgr.Detach(peerListenAddr, pl) {
 			m.metrics.PeerDisconnectTotal.Add(1)
-			logger.Warn("routeragent peer disconnected", logger.String("direction", direction), logger.String("peer_listen_addr", peerListenAddr), logger.String("remote_addr", remoteAddr))
+			logger.Warn("routeragent peer disconnected", logger.String("direction", direction), logger.String("peer_key", peerListenAddr), logger.String("remote_addr", remoteAddr))
 		}
 	}()
 }
@@ -410,12 +424,12 @@ func (m *Module) post(fn func()) {
 
 // 转发帧到指定 peer
 func (m *Module) ForwardFrame(addr string, frame Frame) error {
-	return m.sendPeerOrQueue(addr, peerOutbound{frame: frame})
+	return m.sendPeerOrQueue(addr, 0, peerOutbound{frame: frame})
 }
 
 // 发送握手帧
 func (m *Module) HandshakePeer(addr string, nodeID uint32) error {
 	body := make([]byte, 4)
 	binary.BigEndian.PutUint32(body, nodeID)
-	return m.sendPeerOrQueue(addr, peerOutbound{frame: Frame{Type: FrameHandshake, Body: body}})
+	return m.sendPeerOrQueue(addr, 0, peerOutbound{frame: Frame{Type: FrameHandshake, Body: body}})
 }
