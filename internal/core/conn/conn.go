@@ -1,6 +1,7 @@
 package conn
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"net"
@@ -88,7 +89,10 @@ func (c *TCPConn) LastRecvUnixNano() int64 { return c.lastRecv.Load() }
 // TouchRecv 刷新最近收包时间
 func (c *TCPConn) TouchRecv() { c.lastRecv.Store(time.Now().UnixNano()) }
 
+const tcpWriteBatchMaxFrames = 16
+
 func (c *TCPConn) writeLoop() {
+	var buf bytes.Buffer
 	for {
 		select {
 		case <-c.done:
@@ -97,10 +101,24 @@ func (c *TCPConn) writeLoop() {
 			if data == nil {
 				continue
 			}
-			if _, err := c.conn.Write(data); err != nil {
+			buf.Write(data)
+			for drained := 1; drained < tcpWriteBatchMaxFrames; drained++ {
+				select {
+				case d2 := <-c.sendCh:
+					if d2 == nil {
+						continue
+					}
+					buf.Write(d2)
+				default:
+					goto flushNow
+				}
+			}
+		flushNow:
+			if _, err := c.conn.Write(buf.Bytes()); err != nil {
 				_ = c.Close()
 				return
 			}
+			buf.Reset()
 		}
 	}
 }

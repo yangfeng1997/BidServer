@@ -65,6 +65,7 @@ func TestPingTongClientGateLobbyRoundTrip(t *testing.T) {
 	clientConn := &testConn{addr: "client:1"}
 	sess := gateMod.sessions.OnConnect(clientConn)
 	gateMod.rpcCore = corerpc.New(frameTransport{ra: ra, from: gateConn})
+	defer gateMod.rpcCore.Close()
 
 	lobbyMod := lobby.NewModuleForTest()
 	lobbyMod.SetClient(lobbyFrameSender{ra: ra, from: lobbyConn})

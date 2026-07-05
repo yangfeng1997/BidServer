@@ -16,18 +16,22 @@ type Transport interface {
 
 type inflight struct {
 	onResult func([]byte, errcode.ErrCode)
-	timer    *time.Timer
+	deadline time.Time
 	span     Span
 }
 
 // seq 和 pending 管理
 type Core struct {
-	transport Transport
-	poster    Poster
-	timeout   time.Duration
-	seq       atomic.Uint64
-	mu        sync.Mutex
-	pending   map[uint64]*inflight
+	transport    Transport
+	poster       Poster
+	timeout      time.Duration
+	scanInterval time.Duration
+	seq          atomic.Uint64
+	mu           sync.Mutex
+	pending      map[uint64]*inflight
+	stopCh       chan struct{}
+	scanWG       sync.WaitGroup
+	closeOnce    sync.Once
 }
 
 // Option 用于配置 Core
@@ -43,16 +47,28 @@ func WithDefaultTimeout(d time.Duration) Option {
 	return func(c *Core) { c.timeout = d }
 }
 
+// WithScanInterval 设置超时扫描间隔
+func WithScanInterval(d time.Duration) Option {
+	return func(c *Core) { c.scanInterval = d }
+}
+
 // New 创建 RPC 引擎
 func New(transport Transport, opts ...Option) *Core {
 	c := &Core{
-		transport: transport,
-		pending:   make(map[uint64]*inflight),
-		timeout:   3 * time.Second,
+		transport:    transport,
+		pending:      make(map[uint64]*inflight),
+		timeout:      3 * time.Second,
+		scanInterval: 100 * time.Millisecond,
+		stopCh:       make(chan struct{}),
 	}
 	for _, opt := range opts {
 		opt(c)
 	}
+	if c.scanInterval <= 0 {
+		c.scanInterval = 100 * time.Millisecond
+	}
+	c.scanWG.Add(1)
+	go c.scanLoop()
 	return c
 }
 
@@ -71,19 +87,13 @@ func (c *Core) Call(t Target, route string, body []byte, ctx Ctx, on func([]byte
 	if t.Deadline > 0 && t.Deadline < reqTimeout {
 		reqTimeout = t.Deadline
 	}
-	// 先插入 pending 再启动定时器，避免条目插入前触发导致泄露
-	c.mu.Lock()
-	c.pending[seq] = &inflight{onResult: on, span: span}
-	c.mu.Unlock()
+	f := &inflight{onResult: on, span: span}
 	if reqTimeout > 0 {
-		c.mu.Lock()
-		if f, ok := c.pending[seq]; ok {
-			f.timer = time.AfterFunc(reqTimeout, func() {
-				c.dispatch(func() { c.onTimeout(seq) })
-			})
-		}
-		c.mu.Unlock()
+		f.deadline = time.Now().Add(reqTimeout)
 	}
+	c.mu.Lock()
+	c.pending[seq] = f
+	c.mu.Unlock()
 
 	head := Header{
 		SeqID:       seq,
@@ -120,29 +130,51 @@ func (c *Core) OnResponse(seq uint64, payload []byte, code errcode.ErrCode) {
 	if f == nil {
 		return
 	}
-	if f.timer != nil {
-		f.timer.Stop()
-	}
 	if f.span != nil {
 		f.span.Finish()
 	}
 	c.dispatch(func() { f.onResult(payload, code) })
 }
 
-func (c *Core) onTimeout(seq uint64) {
+func (c *Core) scanLoop() {
+	defer c.scanWG.Done()
+	ticker := time.NewTicker(c.scanInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-c.stopCh:
+			return
+		case <-ticker.C:
+			c.scanExpired()
+		}
+	}
+}
+
+func (c *Core) scanExpired() {
+	now := time.Now()
+	var expired []*inflight
 	c.mu.Lock()
-	f := c.pending[seq]
-	if f != nil {
-		delete(c.pending, seq)
+	for seq, f := range c.pending {
+		if !f.deadline.IsZero() && now.After(f.deadline) {
+			delete(c.pending, seq)
+			expired = append(expired, f)
+		}
 	}
 	c.mu.Unlock()
-	if f == nil {
-		return
+	for _, f := range expired {
+		if f.span != nil {
+			f.span.Finish()
+		}
+		c.dispatch(func() { f.onResult(nil, errcode.ERR_TIMEOUT) })
 	}
-	if f.span != nil {
-		f.span.Finish()
-	}
-	c.dispatch(func() { f.onResult(nil, errcode.ERR_TIMEOUT) })
+}
+
+// Close 停止超时扫描 goroutine
+func (c *Core) Close() {
+	c.closeOnce.Do(func() {
+		close(c.stopCh)
+		c.scanWG.Wait()
+	})
 }
 
 func (c *Core) dispatch(fn func()) {

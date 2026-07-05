@@ -2,7 +2,6 @@ package lobby
 
 import (
 	corerpc "project/internal/core/rpc"
-	"project/pkg/logger"
 	handlerpb "project/protocol/handler"
 )
 
@@ -21,8 +20,5 @@ func (h *Handler) Ping(_ corerpc.Ctx, req *handlerpb.CS_Ping_Req, reply corerpc.
 	if req != nil && req.GetText() != "" {
 		text = "tong:" + req.GetText()
 	}
-	logger.Info("ping lobby handler",
-		logger.String("request_text", req.GetText()),
-		logger.String("response_text", text))
 	reply(&handlerpb.SC_Tong_Rsp{Text: text}, nil)
 }

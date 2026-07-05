@@ -67,6 +67,7 @@ func TestCoreCallAndOnResponse(t *testing.T) {
 	trans := &fakeTransport{}
 	p := &syncPoster{}
 	core := New(trans, WithPoster(p))
+	defer core.Close()
 
 	var gotPayload []byte
 	var gotCode errcode.ErrCode
@@ -120,6 +121,7 @@ func TestCoreCallAndOnResponse(t *testing.T) {
 func TestCoreSend(t *testing.T) {
 	trans := &fakeTransport{}
 	core := New(trans)
+	defer core.Close()
 
 	core.Send(Target{ServerType: 3, Mode: RoutingDirect, NodeID: 42}, "Test/Ping", []byte("ping"), Background())
 
@@ -143,7 +145,8 @@ func TestCoreSend(t *testing.T) {
 func TestCoreTimeout(t *testing.T) {
 	trans := &fakeTransport{}
 	p := &syncPoster{}
-	core := New(trans, WithPoster(p), WithDefaultTimeout(10*time.Millisecond))
+	core := New(trans, WithPoster(p), WithDefaultTimeout(10*time.Millisecond), WithScanInterval(5*time.Millisecond))
+	defer core.Close()
 
 	var timedOut atomic.Bool
 
@@ -169,6 +172,7 @@ func TestCoreTimeout(t *testing.T) {
 func TestCoreSeqIncrement(t *testing.T) {
 	trans := &fakeTransport{}
 	core := New(trans)
+	defer core.Close()
 
 	var seqs []uint64
 	for i := 0; i < 10; i++ {
@@ -192,6 +196,7 @@ func TestCoreSeqIncrement(t *testing.T) {
 func TestCoreNilCallback(t *testing.T) {
 	trans := &fakeTransport{}
 	core := New(trans)
+	defer core.Close()
 
 	// Call with nil callback should not register pending
 	core.Call(Target{ServerType: 2}, "Test/X", []byte("x"), Background(), nil)
@@ -203,7 +208,8 @@ func TestCoreNilCallback(t *testing.T) {
 func TestCoreReplyAfterTimeout(t *testing.T) {
 	trans := &fakeTransport{}
 	p := &syncPoster{}
-	core := New(trans, WithPoster(p), WithDefaultTimeout(10*time.Millisecond))
+	core := New(trans, WithPoster(p), WithDefaultTimeout(10*time.Millisecond), WithScanInterval(5*time.Millisecond))
+	defer core.Close()
 
 	callCount := atomic.Int32{}
 	core.Call(Target{ServerType: 2}, "Test/Late", []byte("x"), Background(),
@@ -225,6 +231,7 @@ func TestCoreMultipleConcurrentCalls(t *testing.T) {
 	trans := &fakeTransport{}
 	p := &syncPoster{}
 	core := New(trans, WithPoster(p))
+	defer core.Close()
 
 	var wg sync.WaitGroup
 	const n = 50
@@ -256,6 +263,7 @@ func TestCoreMultipleConcurrentCalls(t *testing.T) {
 
 func TestCoreDefault(t *testing.T) {
 	core := New(&fakeTransport{})
+	defer core.Close()
 	Init(core)
 	if Default() != core {
 		t.Error("Default() should return the initialized core")

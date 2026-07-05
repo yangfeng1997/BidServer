@@ -30,13 +30,14 @@ func (m *MemberTable) Upsert(info NodeInfo, serverType uint32) {
 	defer m.mu.Unlock()
 	m.byNodeID[info.NodeID] = info
 	items := m.byServerType[serverType]
-	filtered := items[:0]
+	out := make([]NodeInfo, 0, len(items)+1)
 	for _, it := range items {
 		if it.NodeID != info.NodeID {
-			filtered = append(filtered, it)
+			out = append(out, it)
 		}
 	}
-	m.byServerType[serverType] = append(filtered, info)
+	out = append(out, info)
+	m.byServerType[serverType] = out
 }
 
 // Delete 删除指定 nodeID
@@ -45,17 +46,17 @@ func (m *MemberTable) Delete(nodeID uint32) {
 	defer m.mu.Unlock()
 	delete(m.byNodeID, nodeID)
 	for serverType, items := range m.byServerType {
-		filtered := items[:0]
+		out := make([]NodeInfo, 0, len(items))
 		for _, it := range items {
 			if it.NodeID != nodeID {
-				filtered = append(filtered, it)
+				out = append(out, it)
 			}
 		}
-		if len(filtered) == 0 {
+		if len(out) == 0 {
 			delete(m.byServerType, serverType)
 			continue
 		}
-		m.byServerType[serverType] = filtered
+		m.byServerType[serverType] = out
 	}
 }
 
@@ -67,12 +68,9 @@ func (m *MemberTable) GetByNodeID(id uint32) (NodeInfo, bool) {
 	return info, ok
 }
 
-// ListByServerType 获取同类型节点列表
+// ListByServerType 获取同类型节点列表（返回不可变快照，调用方不可修改）
 func (m *MemberTable) ListByServerType(serverType uint32) []NodeInfo {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	items := m.byServerType[serverType]
-	out := make([]NodeInfo, len(items))
-	copy(out, items)
-	return out
+	return m.byServerType[serverType]
 }

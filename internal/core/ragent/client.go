@@ -1,6 +1,7 @@
 package ragent
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -131,16 +132,35 @@ func (c *Client) Send(frame routeragent.Frame) error {
 	}
 }
 
+const clientWriteBatchMaxFrames = 16
+
 func (c *Client) writeLoop(raw net.Conn) {
+	var buf bytes.Buffer
 	for {
 		select {
 		case <-c.done:
 			return
 		case frame := <-c.sendCh:
-			if err := writeFrame(raw, frame); err != nil {
+			data, err := routeragent.EncodeFrame(frame)
+			if err != nil {
+				continue
+			}
+			buf.Write(data)
+			for drained := 1; drained < clientWriteBatchMaxFrames; drained++ {
+				select {
+				case f2 := <-c.sendCh:
+					d2, _ := routeragent.EncodeFrame(f2)
+					buf.Write(d2)
+				default:
+					goto flushNow
+				}
+			}
+		flushNow:
+			if _, err := raw.Write(buf.Bytes()); err != nil {
 				_ = c.Close()
 				return
 			}
+			buf.Reset()
 		}
 	}
 }

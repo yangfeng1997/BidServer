@@ -69,7 +69,7 @@ func DecodeMessage(data []byte) (Message, error) {
 			Type:  msgType,
 			SeqID: binary.BigEndian.Uint16(data[1:3]),
 			CmdID: binary.BigEndian.Uint32(data[3:7]),
-			Body:  append([]byte(nil), data[7:]...),
+			Body:  data[7:],
 		}, nil
 	case MessageResponse:
 		if len(data) < 11 {
@@ -80,7 +80,7 @@ func DecodeMessage(data []byte) (Message, error) {
 			SeqID:   binary.BigEndian.Uint16(data[1:3]),
 			CmdID:   binary.BigEndian.Uint32(data[3:7]),
 			ErrCode: errcode.ErrCode(binary.BigEndian.Uint32(data[7:11])),
-			Body:    append([]byte(nil), data[11:]...),
+			Body:    data[11:],
 		}, nil
 	case MessageNotify:
 		if len(data) < 5 {
@@ -89,7 +89,7 @@ func DecodeMessage(data []byte) (Message, error) {
 		return Message{
 			Type:  msgType,
 			CmdID: binary.BigEndian.Uint32(data[1:5]),
-			Body:  append([]byte(nil), data[5:]...),
+			Body:  data[5:],
 		}, nil
 	default:
 		return Message{}, fmt.Errorf("message: unknown type %d", msgType)

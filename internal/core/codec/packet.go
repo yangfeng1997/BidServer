@@ -44,7 +44,7 @@ func DecodePacket(data []byte) (Packet, error) {
 	if len(data) != 4+bodyLen {
 		return Packet{}, fmt.Errorf("packet length mismatch: want %d got %d", 4+bodyLen, len(data))
 	}
-	return Packet{Type: PacketType(data[0]), Body: append([]byte(nil), data[4:]...)}, nil
+	return Packet{Type: PacketType(data[0]), Body: data[4:]}, nil
 }
 
 func putUint24(dst []byte, v uint32) {

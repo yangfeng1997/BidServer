@@ -1,7 +1,6 @@
 package routeragent
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
 )
@@ -80,13 +79,13 @@ func DecodeRPCWireHeader(data []byte) (RPCWireHeader, error) {
 	if len(data) < pos+keyLen+2 {
 		return RPCWireHeader{}, fmt.Errorf("rpc header key length mismatch")
 	}
-	h.RoutingKey = string(bytes.Clone(data[pos : pos+keyLen]))
+	h.RoutingKey = string(data[pos : pos+keyLen])
 	pos += keyLen
 	routeLen := int(binary.BigEndian.Uint16(data[pos : pos+2]))
 	pos += 2
 	if len(data) < pos+routeLen {
 		return RPCWireHeader{}, fmt.Errorf("rpc header route length mismatch")
 	}
-	h.Route = string(bytes.Clone(data[pos : pos+routeLen]))
+	h.Route = string(data[pos : pos+routeLen])
 	return h, nil
 }

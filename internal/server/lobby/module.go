@@ -11,9 +11,8 @@ import (
 	"project/internal/core/app"
 	"project/internal/core/errcode"
 	"project/internal/core/ragent"
-	corerpc "project/internal/core/rpc"
+	corerpc 	"project/internal/core/rpc"
 	"project/internal/server/routeragent"
-	"project/pkg/logger"
 	handlerpb "project/protocol/handler"
 )
 
@@ -132,23 +131,7 @@ func (m *Module) dispatchRoute(head routeragent.RPCWireHeader, body []byte, repl
 		if err := proto.Unmarshal(body, &req); err != nil {
 			return errcode.New(errcode.ERR_UNMARSHAL, err.Error())
 		}
-		logger.Info("ping lobby receive from gate",
-			logger.Uint64("rpc_seq", head.SeqID),
-			logger.Uint32("src_node", head.SrcNodeID),
-			logger.Uint32("dest_node", head.DestNodeID),
-			logger.String("route", head.Route),
-			logger.String("text", req.GetText()))
-		m.handler.Ping(ctx, &req, replyHandler[*handlerpb.SC_Tong_Rsp](func(payload []byte, err error) {
-			rspHead := responseHead(head, 0)
-			logger.Info("tong lobby send to gate",
-				logger.Uint64("rpc_seq", rspHead.SeqID),
-				logger.Uint32("src_node", rspHead.SrcNodeID),
-				logger.Uint32("dest_node", rspHead.DestNodeID),
-				logger.String("route", rspHead.Route),
-				logger.Uint32("err_code", uint32(errcode.CodeOf(err))),
-				logger.Int("payload_len", len(payload)))
-			reply(payload, err)
-		}))
+		m.handler.Ping(ctx, &req, replyHandler[*handlerpb.SC_Tong_Rsp](reply))
 		return nil
 	default:
 		return errcode.New(errcode.ERR_NO_ROUTE, "route not found: "+head.Route)

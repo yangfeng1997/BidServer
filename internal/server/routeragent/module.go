@@ -369,6 +369,10 @@ func (m *Module) sendToNode(nodeID uint32, frame Frame) error {
 
 // sendResponseViaPeer 将应答通过原请求进入的 peer 连接送回，避免创建多余连接。
 func (m *Module) sendResponseViaPeer(seqID uint64, destNodeID uint32, frame Frame) {
+	if local := m.localConn(destNodeID); local != nil {
+		_ = local.Send(frame)
+		return
+	}
 	info, ok := m.memberTable.GetByNodeID(destNodeID)
 	if !ok {
 		return
