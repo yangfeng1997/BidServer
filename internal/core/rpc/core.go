@@ -104,7 +104,25 @@ func (c *Core) Call(t Target, route string, body []byte, ctx Ctx, on func([]byte
 		RoutingKey:  t.Key,
 		ServerType:  t.ServerType,
 	}
-	_ = c.transport.SendFrame(t, head, body)
+	if err := c.transport.SendFrame(t, head, body); err != nil {
+		c.mu.Lock()
+		f := c.pending[seq]
+		if f != nil {
+			delete(c.pending, seq)
+		}
+		c.mu.Unlock()
+		if f == nil {
+			return
+		}
+		if f.span != nil {
+			f.span.Finish()
+		}
+		code := errcode.CodeOf(err)
+		if code == errcode.OK {
+			code = errcode.ERR_INTERNAL
+		}
+		c.dispatch(func() { f.onResult(nil, code) })
+	}
 }
 
 // 发起单向通知

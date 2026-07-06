@@ -6,14 +6,12 @@ import (
 	"sync"
 	"time"
 
-	"google.golang.org/protobuf/proto"
-
 	"project/internal/core/app"
 	"project/internal/core/errcode"
 	"project/internal/core/ragent"
 	corerpc "project/internal/core/rpc"
 	"project/internal/server/routeragent"
-	handlerpb "project/protocol/handler"
+	genhandler "project/protocol/gen/handler"
 )
 
 const moduleName = "lobby"
@@ -27,11 +25,12 @@ type routeragentClient interface {
 
 type Module struct {
 	app.BaseModule
-	ready    *app.Ready
-	cfg      *LobbyConfigEntry
-	client   routeragentClient
-	handler  *Handler
-	stopOnce sync.Once
+	ready         *app.Ready
+	cfg           *LobbyConfigEntry
+	client        routeragentClient
+	handler       *Handler
+	rpcDispatcher *corerpc.Dispatcher
+	stopOnce      sync.Once
 }
 
 func NewModule() *Module {
@@ -55,6 +54,8 @@ func (m *Module) Init() error {
 		return fmt.Errorf("lobby app does not implement poster")
 	}
 	m.handler = NewHandler()
+	m.rpcDispatcher = corerpc.NewDispatcher()
+	genhandler.RegisterLobbyHandler(m.rpcDispatcher, m.handler)
 	m.client = ragent.NewClient(m.App().NodeIDUint32(), cfg.RouteragentSockPath, poster, m.handleRagentFrame)
 	return nil
 }
@@ -111,32 +112,7 @@ func (m *Module) handleInbound(frame routeragent.Frame) {
 }
 
 func (m *Module) dispatchRoute(head routeragent.RPCWireHeader, body []byte, reply func([]byte, error)) error {
-	ctx := inboundCtx(head)
-	switch head.Route {
-	case "LobbyHandler/ClaimReward":
-		var req handlerpb.CS_ClaimReward_Req
-		if err := proto.Unmarshal(body, &req); err != nil {
-			return errcode.New(errcode.ERR_UNMARSHAL, err.Error())
-		}
-		m.handler.ClaimReward(ctx, &req, replyHandler[*handlerpb.SC_ClaimReward_Rsp](reply))
-		return nil
-	case "LobbyHandler/SyncPos":
-		var ntf handlerpb.CS_SyncPos_Ntf
-		if err := proto.Unmarshal(body, &ntf); err != nil {
-			return errcode.New(errcode.ERR_UNMARSHAL, err.Error())
-		}
-		m.handler.SyncPos(ctx, &ntf)
-		return nil
-	case "LobbyHandler/Ping":
-		var req handlerpb.CS_Ping_Req
-		if err := proto.Unmarshal(body, &req); err != nil {
-			return errcode.New(errcode.ERR_UNMARSHAL, err.Error())
-		}
-		m.handler.Ping(ctx, &req, replyHandler[*handlerpb.SC_Tong_Rsp](reply))
-		return nil
-	default:
-		return errcode.New(errcode.ERR_NO_ROUTE, "route not found: "+head.Route)
-	}
+	return m.rpcDispatcher.Dispatch(head.Route, inboundCtx(head), body, reply)
 }
 
 func (m *Module) nodeID() uint32 {
@@ -157,28 +133,6 @@ func responseHead(req routeragent.RPCWireHeader, localNodeID uint32) routeragent
 	return rsp
 }
 
-func replyHandler[T proto.Message](reply func([]byte, error)) corerpc.Reply[T] {
-	return func(rsp T, err error) {
-		if reply == nil {
-			return
-		}
-		if err != nil {
-			reply(nil, err)
-			return
-		}
-		if proto.Message(rsp) == nil {
-			reply(nil, errcode.New(errcode.ERR_INTERNAL, "nil response"))
-			return
-		}
-		payload, merr := proto.Marshal(rsp)
-		if merr != nil {
-			reply(nil, errcode.New(errcode.ERR_INTERNAL, merr.Error()))
-			return
-		}
-		reply(payload, nil)
-	}
-}
-
 func inboundCtx(head routeragent.RPCWireHeader) corerpc.Ctx {
 	ctx := corerpc.Background().WithFromNode(head.SrcNodeID)
 	if head.DeadlineMs > 0 {
@@ -188,7 +142,10 @@ func inboundCtx(head routeragent.RPCWireHeader) corerpc.Ctx {
 }
 
 func NewModuleForTest() *Module {
-	return &Module{ready: app.NewReady(), handler: NewHandler()}
+	handler := NewHandler()
+	dispatcher := corerpc.NewDispatcher()
+	genhandler.RegisterLobbyHandler(dispatcher, handler)
+	return &Module{ready: app.NewReady(), handler: handler, rpcDispatcher: dispatcher}
 }
 
 func (m *Module) HandleRagentFrame(frame routeragent.Frame) {

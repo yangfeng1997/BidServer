@@ -2,9 +2,16 @@
 package remote
 
 import (
-	dispatcher "project/internal/core/dispatcher"
+	proto "google.golang.org/protobuf/proto"
+
+	errcode "project/internal/core/errcode"
 	corerpc "project/internal/core/rpc"
 	remote "project/protocol/remote"
+)
+
+const (
+	RouteLobbyRemoteLogin            = "LobbyRemote/Login"
+	RouteLobbyRemotePlayerDisconnect = "LobbyRemote/PlayerDisconnect"
 )
 
 type LobbyRemote interface {
@@ -12,11 +19,26 @@ type LobbyRemote interface {
 	PlayerDisconnect(ctx corerpc.Ctx, ntf *remote.RPC_PlayerDisconnect_Ntf)
 }
 
-func RegisterLobbyRemote(d *dispatcher.Dispatcher, srv LobbyRemote) {
-	// LobbyRemote/Login
-	_ = d
-	_ = srv
-	// LobbyRemote/PlayerDisconnect
-	_ = d
-	_ = srv
+func RegisterLobbyRemote(d *corerpc.Dispatcher, srv LobbyRemote) {
+	if d == nil || srv == nil {
+		return
+	}
+	// LobbyRemote/Login (Req/Rsp)
+	d.MustRegister(RouteLobbyRemoteLogin, corerpc.RecoverRoute(RouteLobbyRemoteLogin, func(ctx corerpc.Ctx, body []byte, reply func([]byte, error)) error {
+		var req remote.RPC_Login_Req
+		if err := proto.Unmarshal(body, &req); err != nil {
+			return errcode.New(errcode.ERR_UNMARSHAL, err.Error())
+		}
+		srv.Login(ctx, &req, corerpc.ReplyProto[*remote.RPC_Login_Rsp](reply))
+		return nil
+	}))
+	// LobbyRemote/PlayerDisconnect (Notify)
+	d.MustRegister(RouteLobbyRemotePlayerDisconnect, corerpc.RecoverRoute(RouteLobbyRemotePlayerDisconnect, func(ctx corerpc.Ctx, body []byte, reply func([]byte, error)) error {
+		var ntf remote.RPC_PlayerDisconnect_Ntf
+		if err := proto.Unmarshal(body, &ntf); err != nil {
+			return errcode.New(errcode.ERR_UNMARSHAL, err.Error())
+		}
+		srv.PlayerDisconnect(ctx, &ntf)
+		return nil
+	}))
 }

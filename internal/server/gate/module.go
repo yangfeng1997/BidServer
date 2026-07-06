@@ -6,8 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"google.golang.org/protobuf/proto"
-
 	"project/internal/core/acceptor"
 	"project/internal/core/app"
 	"project/internal/core/codec"
@@ -20,6 +18,7 @@ import (
 	"project/internal/server/routeragent"
 	"project/protocol/common"
 	genrpc "project/protocol/gen"
+	genremote "project/protocol/gen/remote"
 	remotepb "project/protocol/remote"
 )
 
@@ -27,15 +26,16 @@ const moduleName = "gate"
 
 type Module struct {
 	app.BaseModule
-	ready      *app.Ready
-	sessions   *session.SessionManager
-	dispatcher *dispatcher.GateDispatcher
-	rpcCore    *corerpc.Core
-	client     *ragent.Client
-	cfg        *GateConfigEntry
-	stopCh     chan struct{}
-	stopOnce   sync.Once
-	acceptors  []acceptor.Acceptor
+	ready            *app.Ready
+	sessions         *session.SessionManager
+	dispatcher       *dispatcher.GateDispatcher
+	remoteDispatcher *corerpc.Dispatcher
+	rpcCore          *corerpc.Core
+	client           *ragent.Client
+	cfg              *GateConfigEntry
+	stopCh           chan struct{}
+	stopOnce         sync.Once
+	acceptors        []acceptor.Acceptor
 }
 
 func NewModule() *Module {
@@ -60,6 +60,8 @@ func (m *Module) Init() error {
 	}
 
 	m.sessions = session.NewSessionManager()
+	m.remoteDispatcher = corerpc.NewDispatcher()
+	genremote.RegisterGateRemote(m.remoteDispatcher, m)
 	m.dispatcher = dispatcher.NewGateDispatcher(uint32(common.ServerType_ST_GATESVR), m.sessions)
 	m.dispatcher.Use(dispatcher.RecoverMiddleware())
 	m.dispatcher.Use(dispatcher.AuthMiddleware(genrpc.AuthWhitelist))
@@ -224,32 +226,7 @@ func (m *Module) handleRemote(frame routeragent.Frame) {
 		return
 	}
 	ctx := corerpc.Background().WithFromNode(head.SrcNodeID).WithDeadline(time.Duration(head.DeadlineMs) * time.Millisecond)
-	var code errcode.ErrCode = errcode.OK
-	switch head.Route {
-	case "GateRemote/SendToClient":
-		var ntf remotepb.RPC_SendToClient_Ntf
-		if err := proto.Unmarshal(frame.Body, &ntf); err != nil {
-			code = errcode.ERR_UNMARSHAL
-		} else {
-			m.SendToClient(ctx, &ntf)
-		}
-	case "GateRemote/BindSession":
-		var ntf remotepb.RPC_BindSession_Ntf
-		if err := proto.Unmarshal(frame.Body, &ntf); err != nil {
-			code = errcode.ERR_UNMARSHAL
-		} else {
-			m.BindSession(ctx, &ntf)
-		}
-	case "GateRemote/SetBound":
-		var ntf remotepb.RPC_SetBound_Ntf
-		if err := proto.Unmarshal(frame.Body, &ntf); err != nil {
-			code = errcode.ERR_UNMARSHAL
-		} else {
-			m.SetBound(ctx, &ntf)
-		}
-	default:
-		code = errcode.ERR_NO_ROUTE
-	}
+	code := errcode.CodeOf(m.remoteDispatcher.Dispatch(head.Route, ctx, frame.Body, nil))
 	if frame.Type == routeragent.FrameRpcRequest && head.SeqID != 0 {
 		rspHead := head
 		if rspHead.DestNodeID != 0 {

@@ -4,12 +4,15 @@ package handler
 import (
 	proto "google.golang.org/protobuf/proto"
 
-	codec "project/internal/core/codec"
-	dispatcher "project/internal/core/dispatcher"
 	errcode "project/internal/core/errcode"
 	corerpc "project/internal/core/rpc"
-	session "project/internal/core/session"
 	handler "project/protocol/handler"
+)
+
+const (
+	RouteLobbyHandlerClaimReward = "LobbyHandler/ClaimReward"
+	RouteLobbyHandlerSyncPos     = "LobbyHandler/SyncPos"
+	RouteLobbyHandlerPing        = "LobbyHandler/Ping"
 )
 
 type LobbyHandler interface {
@@ -18,57 +21,35 @@ type LobbyHandler interface {
 	Ping(ctx corerpc.Ctx, req *handler.CS_Ping_Req, reply corerpc.Reply[*handler.SC_Tong_Rsp])
 }
 
-func RegisterLobbyHandler(d *dispatcher.Dispatcher, srv LobbyHandler) {
-	// LobbyHandler/ClaimReward (Req/Rsp) cmd=2050 rsp=2051
-	d.RegisterHandler(2050, func(sess *session.Session, msg *codec.Message) error {
+func RegisterLobbyHandler(d *corerpc.Dispatcher, srv LobbyHandler) {
+	if d == nil || srv == nil {
+		return
+	}
+	// LobbyHandler/ClaimReward (Req/Rsp)
+	d.MustRegister(RouteLobbyHandlerClaimReward, corerpc.RecoverRoute(RouteLobbyHandlerClaimReward, func(ctx corerpc.Ctx, body []byte, reply func([]byte, error)) error {
 		var req handler.CS_ClaimReward_Req
-		if err := proto.Unmarshal(msg.Body, &req); err != nil {
+		if err := proto.Unmarshal(body, &req); err != nil {
 			return errcode.New(errcode.ERR_UNMARSHAL, err.Error())
 		}
-		ctx := corerpc.Background()
-		srv.ClaimReward(ctx, &req, func(rsp *handler.SC_ClaimReward_Rsp, err error) {
-			if err != nil || rsp == nil {
-				return
-			}
-			data, merr := proto.Marshal(rsp)
-			if merr != nil {
-				return
-			}
-			// reply writes back via ragent; path goes through rpc.Core
-			_ = sess
-			_ = data
-		})
+		srv.ClaimReward(ctx, &req, corerpc.ReplyProto[*handler.SC_ClaimReward_Rsp](reply))
 		return nil
-	})
-	// LobbyHandler/SyncPos (Notify) cmd=2052
-	d.RegisterHandler(2052, func(sess *session.Session, msg *codec.Message) error {
+	}))
+	// LobbyHandler/SyncPos (Notify)
+	d.MustRegister(RouteLobbyHandlerSyncPos, corerpc.RecoverRoute(RouteLobbyHandlerSyncPos, func(ctx corerpc.Ctx, body []byte, reply func([]byte, error)) error {
 		var ntf handler.CS_SyncPos_Ntf
-		if err := proto.Unmarshal(msg.Body, &ntf); err != nil {
+		if err := proto.Unmarshal(body, &ntf); err != nil {
 			return errcode.New(errcode.ERR_UNMARSHAL, err.Error())
 		}
-		ctx := corerpc.Background()
 		srv.SyncPos(ctx, &ntf)
 		return nil
-	})
-	// LobbyHandler/Ping (Req/Rsp) cmd=2054 rsp=2055
-	d.RegisterHandler(2054, func(sess *session.Session, msg *codec.Message) error {
+	}))
+	// LobbyHandler/Ping (Req/Rsp)
+	d.MustRegister(RouteLobbyHandlerPing, corerpc.RecoverRoute(RouteLobbyHandlerPing, func(ctx corerpc.Ctx, body []byte, reply func([]byte, error)) error {
 		var req handler.CS_Ping_Req
-		if err := proto.Unmarshal(msg.Body, &req); err != nil {
+		if err := proto.Unmarshal(body, &req); err != nil {
 			return errcode.New(errcode.ERR_UNMARSHAL, err.Error())
 		}
-		ctx := corerpc.Background()
-		srv.Ping(ctx, &req, func(rsp *handler.SC_Tong_Rsp, err error) {
-			if err != nil || rsp == nil {
-				return
-			}
-			data, merr := proto.Marshal(rsp)
-			if merr != nil {
-				return
-			}
-			// reply writes back via ragent; path goes through rpc.Core
-			_ = sess
-			_ = data
-		})
+		srv.Ping(ctx, &req, corerpc.ReplyProto[*handler.SC_Tong_Rsp](reply))
 		return nil
-	})
+	}))
 }

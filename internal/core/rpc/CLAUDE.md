@@ -11,7 +11,8 @@
 ## 目录定位
 
 - Go package：`rpc`。
-- RPC 目标描述、请求 pending 管理、超时、回调投递、span 和默认全局 core。
+- RPC 目标描述、请求 pending 管理、超时、回调投递、span、默认全局 core，以及 RouterAgent route 字符串分发器。
+- `Dispatcher` 支持重复 route 启动期检查、panic recover 包装、一次性 reply 和 protobuf reply marshal helper。
 
 ## 主要文件
 
@@ -21,7 +22,9 @@
 - [`default.go`](default.go)
 - [`compose.go`](compose.go)
 - [`span.go`](span.go)
+- [`dispatcher.go`](dispatcher.go)
 - [`core_test.go`](core_test.go)
+- [`dispatcher_test.go`](dispatcher_test.go)
 - [`span_test.go`](span_test.go)
 
 ## 快速读法
@@ -29,6 +32,7 @@
 - 查目标选择和 header 看 `types.go`。
 - 查 Call / Send / OnResponse / timeout 看 `core.go`。
 - 查调用上下文和 trace span 看 `context.go`、`span.go`。
+- 查服务端 route 自动分发看 `dispatcher.go`。
 
 ## 工作规则
 

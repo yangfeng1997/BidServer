@@ -24,8 +24,9 @@
 ## 快速读法
 
 - 查协议扩展选项先看 `common/options.proto`。
-- 查客户端入口命令先看 `handler/` 和 `gen/routes.go`。
-- 查后端 RPC 先看 `remote/` 和 `gen/rpc.go`。
+- 查客户端入口命令先看 `handler/`、`gen/routes.go` 和 `gen/handler/`。
+- 查后端 RPC 先看 `remote/`、`gen/remote/` 和 `gen/rpc.go`。
+- 查 RouterAgent route 自动分发先看 `internal/core/rpc.Dispatcher` 与 `gen/handler/`、`gen/remote/` 的 Register 函数。
 - 查生成链路先看 `tools/gen_routes/` 与 `tools/protoc-gen-svcstub/`。
 
 ## 工作规则

@@ -13,6 +13,8 @@ import (
 type routeItem struct {
 	CmdID      string
 	ServerType string
+	Service    string
+	Method     string
 	Route      string
 	RspCmdID   string
 	NoAuth     bool
@@ -106,6 +108,8 @@ func scanRoutes(dir string) ([]routeItem, error) {
 				items = append(items, routeItem{
 					CmdID:      cmdID,
 					ServerType: serverTypeToConst(serverType),
+					Service:    name,
+					Method:     rpcName,
 					Route:      name + "/" + rpcName,
 					RspCmdID:   rspCmdID,
 					NoAuth:     noAuthRE.MatchString(inputMsg),
@@ -170,6 +174,10 @@ func firstMatch(re *regexp.Regexp, s string) string {
 	return m[1]
 }
 
+func routeConstName(serviceName, methodName string) string {
+	return "Route" + serviceName + methodName
+}
+
 func serverTypeToConst(name string) string {
 	switch strings.TrimSpace(name) {
 	case "ST_GATESVR":
@@ -192,10 +200,15 @@ func renderRoutes(routes []routeItem) string {
 	b.WriteString("\tRoute string\n")
 	b.WriteString("\tRspCmdID uint32\n")
 	b.WriteString("}\n\n")
+	b.WriteString("const (\n")
+	for _, r := range routes {
+		b.WriteString(fmt.Sprintf("\t%s = %q\n", routeConstName(r.Service, r.Method), r.Route))
+	}
+	b.WriteString(")\n\n")
 	b.WriteString("// RouteTable 是客户端入口路由表\n")
 	b.WriteString("var RouteTable = map[uint32]RouteEntry{\n")
 	for _, r := range routes {
-		b.WriteString(fmt.Sprintf("\t%s: {ServerType: %s, Route: %q, RspCmdID: %s},\n", r.CmdID, r.ServerType, r.Route, r.RspCmdID))
+		b.WriteString(fmt.Sprintf("\t%s: {ServerType: %s, Route: %s, RspCmdID: %s},\n", r.CmdID, r.ServerType, routeConstName(r.Service, r.Method), r.RspCmdID))
 	}
 	b.WriteString("}\n\n")
 	b.WriteString("// AuthWhitelist 表示免鉴权的 CmdID 集合\n")

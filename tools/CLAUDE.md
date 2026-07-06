@@ -26,7 +26,7 @@
 - `client_sim/` 负责模拟客户端连接 gatesvr 并发送协议。
 - `configgen/` 负责根据配置 schema 生成 `config/gen/`。
 - `gen_routes/` 负责根据 handler proto 生成路由表。
-- `protoc-gen-svcstub/` 负责生成 handler / remote / RPC stub。
+- `protoc-gen-svcstub/` 负责生成 handler / remote 的 RouterAgent route 注册适配器，以及服务间 typed RPC stub。
 
 ## 工作规则
 

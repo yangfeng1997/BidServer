@@ -14,10 +14,15 @@ import (
 const (
 	serverTypeGate        = 1
 	serverTypeLobby       = 2
-	serverTypeRoom        = 3
-	serverTypeMatch       = 4
-	serverTypeOnline      = 5
 	serverTypeRouterAgent = 6
+)
+
+const (
+	RouteGateRemoteSendToClient      = "GateRemote/SendToClient"
+	RouteGateRemoteBindSession       = "GateRemote/BindSession"
+	RouteGateRemoteSetBound          = "GateRemote/SetBound"
+	RouteLobbyRemoteLogin            = "LobbyRemote/Login"
+	RouteLobbyRemotePlayerDisconnect = "LobbyRemote/PlayerDisconnect"
 )
 
 type Stub struct {
@@ -96,21 +101,21 @@ func (s *Stub) typedSend(ctx corerpc.Ctx, route string, ntf proto.Message) {
 type GateStub struct{ *Stub }
 
 func (s *GateStub) SendToClient(ctx corerpc.Ctx, ntf *remote.RPC_SendToClient_Ntf) {
-	s.typedSend(ctx, "GateRemote/SendToClient", ntf)
+	s.typedSend(ctx, RouteGateRemoteSendToClient, ntf)
 }
 
 func (s *GateStub) BindSession(ctx corerpc.Ctx, ntf *remote.RPC_BindSession_Ntf) {
-	s.typedSend(ctx, "GateRemote/BindSession", ntf)
+	s.typedSend(ctx, RouteGateRemoteBindSession, ntf)
 }
 
 func (s *GateStub) SetBound(ctx corerpc.Ctx, ntf *remote.RPC_SetBound_Ntf) {
-	s.typedSend(ctx, "GateRemote/SetBound", ntf)
+	s.typedSend(ctx, RouteGateRemoteSetBound, ntf)
 }
 
 type LobbyStub struct{ *Stub }
 
 func (s *LobbyStub) Login(ctx corerpc.Ctx, req *remote.RPC_Login_Req, cb func(*remote.RPC_Login_Rsp, error)) {
-	s.typedCall(ctx, "LobbyRemote/Login", req, func(body []byte, err error) {
+	s.typedCall(ctx, RouteLobbyRemoteLogin, req, func(body []byte, err error) {
 		if err != nil {
 			cb(nil, err)
 			return
@@ -125,7 +130,7 @@ func (s *LobbyStub) Login(ctx corerpc.Ctx, req *remote.RPC_Login_Req, cb func(*r
 }
 
 func (s *LobbyStub) PlayerDisconnect(ctx corerpc.Ctx, ntf *remote.RPC_PlayerDisconnect_Ntf) {
-	s.typedSend(ctx, "LobbyRemote/PlayerDisconnect", ntf)
+	s.typedSend(ctx, RouteLobbyRemotePlayerDisconnect, ntf)
 }
 
 var (

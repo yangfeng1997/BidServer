@@ -10,7 +10,7 @@
 ## 目录定位
 
 - Go package：`main`。
-- protoc 插件，基于 `protocol/handler/*.proto` 和 `protocol/remote/*.proto` 生成 handler、remote、RPC stub 代码。
+- protoc 插件，基于 `protocol/handler/*.proto` 和 `protocol/remote/*.proto` 生成 handler / remote 的 RouterAgent route 注册适配器，以及服务间 typed RPC stub 代码。
 
 ## 主要文件
 
@@ -19,9 +19,9 @@
 
 ## 快速读法
 
-- 查 handler 生成看 `genHandlerFile`。
-- 查 remote 生成看 `writeRemoteFile`。
-- 查统一 RPC stub 生成看 `genRPCFile`。
+- 查 handler 生成看 `writeHandlerFile` / `writeServiceFile`。
+- 查 remote 生成看 `writeRemoteFile` / `writeServiceFile`。
+- 查统一 RPC stub 生成看 `writeRPCFile`。
 
 ## 工作规则
 

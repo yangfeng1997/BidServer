@@ -2,9 +2,17 @@
 package remote
 
 import (
-	dispatcher "project/internal/core/dispatcher"
+	proto "google.golang.org/protobuf/proto"
+
+	errcode "project/internal/core/errcode"
 	corerpc "project/internal/core/rpc"
 	remote "project/protocol/remote"
+)
+
+const (
+	RouteGateRemoteSendToClient = "GateRemote/SendToClient"
+	RouteGateRemoteBindSession  = "GateRemote/BindSession"
+	RouteGateRemoteSetBound     = "GateRemote/SetBound"
 )
 
 type GateRemote interface {
@@ -13,14 +21,35 @@ type GateRemote interface {
 	SetBound(ctx corerpc.Ctx, ntf *remote.RPC_SetBound_Ntf)
 }
 
-func RegisterGateRemote(d *dispatcher.Dispatcher, srv GateRemote) {
-	// GateRemote/SendToClient
-	_ = d
-	_ = srv
-	// GateRemote/BindSession
-	_ = d
-	_ = srv
-	// GateRemote/SetBound
-	_ = d
-	_ = srv
+func RegisterGateRemote(d *corerpc.Dispatcher, srv GateRemote) {
+	if d == nil || srv == nil {
+		return
+	}
+	// GateRemote/SendToClient (Notify)
+	d.MustRegister(RouteGateRemoteSendToClient, corerpc.RecoverRoute(RouteGateRemoteSendToClient, func(ctx corerpc.Ctx, body []byte, reply func([]byte, error)) error {
+		var ntf remote.RPC_SendToClient_Ntf
+		if err := proto.Unmarshal(body, &ntf); err != nil {
+			return errcode.New(errcode.ERR_UNMARSHAL, err.Error())
+		}
+		srv.SendToClient(ctx, &ntf)
+		return nil
+	}))
+	// GateRemote/BindSession (Notify)
+	d.MustRegister(RouteGateRemoteBindSession, corerpc.RecoverRoute(RouteGateRemoteBindSession, func(ctx corerpc.Ctx, body []byte, reply func([]byte, error)) error {
+		var ntf remote.RPC_BindSession_Ntf
+		if err := proto.Unmarshal(body, &ntf); err != nil {
+			return errcode.New(errcode.ERR_UNMARSHAL, err.Error())
+		}
+		srv.BindSession(ctx, &ntf)
+		return nil
+	}))
+	// GateRemote/SetBound (Notify)
+	d.MustRegister(RouteGateRemoteSetBound, corerpc.RecoverRoute(RouteGateRemoteSetBound, func(ctx corerpc.Ctx, body []byte, reply func([]byte, error)) error {
+		var ntf remote.RPC_SetBound_Ntf
+		if err := proto.Unmarshal(body, &ntf); err != nil {
+			return errcode.New(errcode.ERR_UNMARSHAL, err.Error())
+		}
+		srv.SetBound(ctx, &ntf)
+		return nil
+	}))
 }

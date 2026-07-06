@@ -70,6 +70,12 @@ func TestServerTypeToConst(t *testing.T) {
 	}
 }
 
+func TestRouteConstName(t *testing.T) {
+	if got := routeConstName("LobbyHandler", "Ping"); got != "RouteLobbyHandlerPing" {
+		t.Fatalf("routeConstName=%q, want RouteLobbyHandlerPing", got)
+	}
+}
+
 func TestToSnake(t *testing.T) {
 	tests := map[string]string{
 		"Lobby":     "lobby",

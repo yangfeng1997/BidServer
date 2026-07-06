@@ -14,6 +14,7 @@ import (
 type fakeTransport struct {
 	mu    sync.Mutex
 	calls []fakeSend
+	err   error
 }
 
 type fakeSend struct {
@@ -25,8 +26,9 @@ type fakeSend struct {
 func (t *fakeTransport) SendFrame(target Target, header Header, body []byte) error {
 	t.mu.Lock()
 	t.calls = append(t.calls, fakeSend{target: target, header: header, body: body})
+	err := t.err
 	t.mu.Unlock()
-	return nil
+	return err
 }
 
 func (t *fakeTransport) callsSnapshot() []fakeSend {
@@ -115,6 +117,34 @@ func TestCoreCallAndOnResponse(t *testing.T) {
 	// pending 已清理
 	if core.PendingLen() != 0 {
 		t.Errorf("pending len=%d, want 0", core.PendingLen())
+	}
+}
+
+func TestCoreCallSendFailureRemovesPendingAndCallbacks(t *testing.T) {
+	trans := &fakeTransport{err: errcode.New(errcode.ERR_INTERNAL, "send failed")}
+	p := &syncPoster{}
+	core := New(trans, WithPoster(p))
+	defer core.Close()
+
+	var gotCode errcode.ErrCode
+	var called atomic.Bool
+	core.Call(Target{ServerType: 2}, "Test/Fail", []byte("req"), Background(), func(payload []byte, code errcode.ErrCode) {
+		if payload != nil {
+			t.Fatalf("payload=%q, want nil", payload)
+		}
+		gotCode = code
+		called.Store(true)
+	})
+
+	if core.PendingLen() != 0 {
+		t.Fatalf("pending len=%d, want 0", core.PendingLen())
+	}
+	p.drain()
+	if !called.Load() {
+		t.Fatal("callback was not called")
+	}
+	if gotCode != errcode.ERR_INTERNAL {
+		t.Fatalf("code=%d, want ERR_INTERNAL", gotCode)
 	}
 }
 

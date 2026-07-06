@@ -1,0 +1,3 @@
+Fetching profile over HTTP from http://127.0.0.1:7462/debug/pprof/profile?seconds=15
+Please wait... (15s)
+Saved profile in /root/pprof/pprof.lobbysvr.samples.cpu.001.pb.gz

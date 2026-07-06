@@ -86,18 +86,24 @@ service TestHandler {
 
 func TestRenderRoutes(t *testing.T) {
 	routes := []routeItem{
-		{"3000", "serverTypeLobby", "TestHandler/Test", "3001", false},
-		{"3002", "serverTypeLobby", "TestHandler/Notify", "0", true},
+		{CmdID: "3000", ServerType: "serverTypeLobby", Service: "TestHandler", Method: "Test", Route: "TestHandler/Test", RspCmdID: "3001", NoAuth: false},
+		{CmdID: "3002", ServerType: "serverTypeLobby", Service: "TestHandler", Method: "Notify", Route: "TestHandler/Notify", RspCmdID: "0", NoAuth: true},
 	}
 	out := renderRoutes(routes)
 	if out == "" {
 		t.Fatal("renderRoutes returned empty string")
 	}
-	if !contains(out, "3000: {ServerType: serverTypeLobby, Route: \"TestHandler/Test\", RspCmdID: 3001}") {
+	if !contains(out, "3000: {ServerType: serverTypeLobby, Route: RouteTestHandlerTest, RspCmdID: 3001}") {
 		t.Error("missing expected route entry")
 	}
 	if !contains(out, "3002: true") {
 		t.Error("missing expected auth whitelist entry")
+	}
+}
+
+func TestRouteConstName(t *testing.T) {
+	if got := routeConstName("TestHandler", "Ping"); got != "RouteTestHandlerPing" {
+		t.Fatalf("routeConstName=%q, want RouteTestHandlerPing", got)
 	}
 }
 
