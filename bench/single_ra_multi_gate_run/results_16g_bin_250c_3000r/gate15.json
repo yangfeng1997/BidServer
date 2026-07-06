@@ -1,0 +1,21 @@
+{
+  "addr": "127.0.0.1:7015",
+  "clients": 250,
+  "requests_per_client": 3000,
+  "sent": 750000,
+  "ok": 750000,
+  "failed": 0,
+  "reconnects": 0,
+  "elapsed_ms": 42469,
+  "qps": 17659.7145777857,
+  "failures": {},
+  "latency": {
+    "count": 750000,
+    "min_ns": 235949,
+    "avg_ns": 14004498,
+    "p50_ns": 12804211,
+    "p90_ns": 22914216,
+    "p99_ns": 34316667,
+    "max_ns": 66879348
+  }
+}

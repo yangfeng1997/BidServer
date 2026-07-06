@@ -22,6 +22,7 @@ type routeragentClient interface {
 	Connect() error
 	Close() error
 	Send(routeragent.Frame) error
+	SendRPCFrame(routeragent.FrameType, routeragent.RPCWireHeader, []byte) error
 }
 
 type Module struct {
@@ -98,14 +99,14 @@ func (m *Module) handleInbound(frame routeragent.Frame) {
 		}
 		rspHead := responseHead(head, m.nodeID())
 		rspHead.ErrCode = uint32(errcode.CodeOf(err))
-		_ = m.client.Send(routeragent.Frame{Type: routeragent.FrameRpcResponse, Header: routeragent.EncodeRPCWireHeader(rspHead), Body: payload})
+		_ = m.client.SendRPCFrame(routeragent.FrameRpcResponse, rspHead, payload)
 	}); err != nil {
 		code = errcode.CodeOf(err)
 	}
 	if frame.Type == routeragent.FrameRpcRequest && head.SeqID != 0 && code != errcode.OK {
 		rspHead := responseHead(head, m.nodeID())
 		rspHead.ErrCode = uint32(code)
-		_ = m.client.Send(routeragent.Frame{Type: routeragent.FrameRpcResponse, Header: routeragent.EncodeRPCWireHeader(rspHead)})
+		_ = m.client.SendRPCFrame(routeragent.FrameRpcResponse, rspHead, nil)
 	}
 }
 

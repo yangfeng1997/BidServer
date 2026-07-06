@@ -1,0 +1,21 @@
+{
+  "addr": "127.0.0.1:7002",
+  "clients": 500,
+  "requests_per_client": 4000,
+  "sent": 2000000,
+  "ok": 2000000,
+  "failed": 0,
+  "reconnects": 0,
+  "elapsed_ms": 46391,
+  "qps": 43111.1673833419,
+  "failures": {},
+  "latency": {
+    "count": 2000000,
+    "min_ns": 216035,
+    "avg_ns": 11416529,
+    "p50_ns": 10667964,
+    "p90_ns": 17912254,
+    "p99_ns": 25775563,
+    "max_ns": 113444026
+  }
+}

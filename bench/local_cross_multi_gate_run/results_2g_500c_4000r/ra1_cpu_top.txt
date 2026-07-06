@@ -1,0 +1,151 @@
+File: routeragent
+Build ID: 7e4448ef6257aa6034c66dce374f8382478e9cf1
+Type: cpu
+Time: 2026-07-06 15:58:52 CST
+Duration: 20s, Total samples = 18.03s (90.14%)
+Showing nodes accounting for 14.19s, 78.70% of 18.03s total
+Dropped 303 nodes (cum <= 0.09s)
+      flat  flat%   sum%        cum   cum%
+     5.20s 28.84% 28.84%      5.20s 28.84%  internal/runtime/syscall/linux.Syscall6
+     1.29s  7.15% 36.00%      1.29s  7.15%  runtime.futex
+     0.69s  3.83% 39.82%      2.33s 12.92%  runtime.selectgo
+     0.64s  3.55% 43.37%      0.64s  3.55%  runtime.procyieldAsm
+     0.56s  3.11% 46.48%      0.77s  4.27%  runtime.unlock2
+     0.46s  2.55% 49.03%      1.22s  6.77%  runtime.lock2
+     0.45s  2.50% 51.53%      0.45s  2.50%  runtime.memmove
+     0.36s  2.00% 53.52%      0.36s  2.00%  runtime.usleep
+     0.32s  1.77% 55.30%      0.32s  1.77%  runtime.memclrNoHeapPointers
+     0.23s  1.28% 56.57%      0.23s  1.28%  runtime.nextFreeFast (inline)
+     0.16s  0.89% 57.46%      0.16s  0.89%  internal/runtime/maps.ctrlGroup.matchH2 (inline)
+     0.14s  0.78% 58.24%      0.31s  1.72%  runtime.scanObject
+     0.13s  0.72% 58.96%      0.20s  1.11%  runtime.tryDeferToSpanScan
+     0.12s  0.67% 59.62%      0.57s  3.16%  runtime.chanrecv
+     0.11s  0.61% 60.23%      0.36s  2.00%  fmt.(*pp).doPrintf
+     0.11s  0.61% 60.84%      3.02s 16.75%  runtime.findRunnable
+     0.11s  0.61% 61.45%      0.11s  0.61%  sync/atomic.(*Int32).Add (inline)
+     0.10s  0.55% 62.01%      0.23s  1.28%  fmt.(*pp).printArg
+     0.10s  0.55% 62.56%      1.53s  8.49%  project/internal/server/routeragent.(*tcpPeerLink).readLoop
+     0.10s  0.55% 63.12%      0.50s  2.77%  project/internal/server/routeragent.AppendRPCWireHeader
+     0.10s  0.55% 63.67%      0.85s  4.71%  runtime.netpoll
+     0.10s  0.55% 64.23%      0.60s  3.33%  runtime.sellock
+     0.10s  0.55% 64.78%      0.72s  3.99%  runtime.stealWork
+     0.09s   0.5% 65.28%      1.49s  8.26%  runtime.mallocgc
+     0.08s  0.44% 65.72%      0.92s  5.10%  project/internal/server/routeragent.(*Module).handlePeerFrame
+     0.08s  0.44% 66.17%      2.90s 16.08%  project/internal/server/routeragent.(*Module).routeFrame
+     0.08s  0.44% 66.61%      0.11s  0.61%  runtime.(*mspan).writeHeapBitsSmall
+     0.08s  0.44% 67.05%      0.44s  2.44%  runtime.runqgrab
+     0.08s  0.44% 67.50%      0.23s  1.28%  runtime.typedmemmove
+     0.07s  0.39% 67.89%      2.67s 14.81%  project/internal/server/routeragent.(*UDSConn).readLoop
+     0.07s  0.39% 68.28%      0.54s  3.00%  project/internal/server/routeragent.(*tcpPeerLink).Send
+     0.07s  0.39% 68.66%      0.26s  1.44%  runtime.mapassign_fast64
+     0.06s  0.33% 69.00%      2.76s 15.31%  project/internal/server/routeragent.(*Module).forwardRPC
+     0.06s  0.33% 69.33%      0.16s  0.89%  project/internal/server/routeragent.AppendFrame
+     0.06s  0.33% 69.66%      0.11s  0.61%  runtime.casgstatus
+     0.06s  0.33% 69.99%      0.68s  3.77%  runtime.mallocgcSmallNoscan
+     0.06s  0.33% 70.33%      0.50s  2.77%  runtime.selunlock
+     0.05s  0.28% 70.60%      0.80s  4.44%  project/internal/server/routeragent.(*Module).handleConn
+     0.05s  0.28% 70.88%      1.17s  6.49%  project/internal/server/routeragent.(*UDSConn).writeLoop
+     0.05s  0.28% 71.16%      0.65s  3.61%  runtime.chansend
+     0.05s  0.28% 71.44%      0.58s  3.22%  runtime.growslice
+     0.05s  0.28% 71.71%      0.60s  3.33%  runtime.mallocgcSmallScanNoHeader
+     0.05s  0.28% 71.99%      0.14s  0.78%  runtime.scanObjectsSmall
+     0.04s  0.22% 72.21%      2.12s 11.76%  internal/poll.(*FD).Read
+     0.04s  0.22% 72.43%      2.38s 13.20%  project/internal/server/routeragent.(*Module).sendPeerOrQueue
+     0.04s  0.22% 72.66%      0.15s  0.83%  project/internal/server/routeragent.(*PeerMgr).getLink
+     0.04s  0.22% 72.88%      0.35s  1.94%  project/internal/server/routeragent.(*UDSConn).Send (inline)
+     0.04s  0.22% 73.10%      0.11s  0.61%  project/internal/server/routeragent.DecodeRPCWireHeader
+     0.04s  0.22% 73.32%      0.54s  3.00%  project/internal/server/routeragent.EncodeRPCWireHeader (inline)
+     0.04s  0.22% 73.54%      0.11s  0.61%  runtime.mapaccess1_fast64
+     0.04s  0.22% 73.77%      3.37s 18.69%  runtime.schedule
+     0.04s  0.22% 73.99%      0.11s  0.61%  runtime.typedmemclr
+     0.04s  0.22% 74.21%      4.53s 25.12%  syscall.RawSyscall6
+     0.03s  0.17% 74.38%      0.14s  0.78%  project/internal/server/routeragent.(*MemberTable).PickHashByServerType
+     0.03s  0.17% 74.54%      2.93s 16.25%  project/internal/server/routeragent.(*Module).handleFrame
+     0.03s  0.17% 74.71%      0.12s  0.67%  runtime.(*mheap).initSpan
+     0.03s  0.17% 74.88%      1.63s  9.04%  runtime.systemstack
+     0.03s  0.17% 75.04%      1.96s 10.87%  syscall.Read (inline)
+     0.02s  0.11% 75.15%      0.67s  3.72%  fmt.Sprintf
+     0.02s  0.11% 75.26%      0.10s  0.55%  fmt.newPrinter
+     0.02s  0.11% 75.37%      2.81s 15.59%  internal/poll.(*FD).Write
+     0.02s  0.11% 75.49%      2.84s 15.75%  net.(*netFD).Write
+     0.02s  0.11% 75.60%      1.61s  8.93%  project/internal/server/routeragent.(*Module).sendPeerOutbound
+     0.02s  0.11% 75.71%      0.61s  3.38%  project/internal/server/routeragent.(*Module).startPeerLoops.func1.1
+     0.02s  0.11% 75.82%      0.68s  3.77%  project/pkg/taskqueue.(*Queue).Post
+     0.02s  0.11% 75.93%      0.50s  2.77%  runtime.(*mcache).nextFree
+     0.02s  0.11% 76.04%      0.13s  0.72%  runtime.(*mcentral).uncacheSpan
+     0.02s  0.11% 76.15%      0.27s  1.50%  runtime.(*mheap).alloc
+     0.02s  0.11% 76.26%      0.24s  1.33%  runtime.(*mheap).allocSpan
+     0.02s  0.11% 76.37%      0.46s  2.55%  runtime.runqsteal
+     0.02s  0.11% 76.48%      0.12s  0.67%  runtime.slicebytetostring
+     0.02s  0.11% 76.59%      0.34s  1.89%  runtime.stopm
+     0.02s  0.11% 76.71%      0.12s  0.67%  runtime.sweepone
+     0.02s  0.11% 76.82%      4.64s 25.73%  syscall.Syscall
+     0.02s  0.11% 76.93%      2.75s 15.25%  syscall.Write (inline)
+     0.01s 0.055% 76.98%      0.72s  3.99%  internal/runtime/syscall/linux.EpollWait
+     0.01s 0.055% 77.04%      2.13s 11.81%  net.(*conn).Read
+     0.01s 0.055% 77.09%      2.85s 15.81%  net.(*conn).Write
+     0.01s 0.055% 77.15%      0.69s  3.83%  project/internal/core/app.(*BaseApp).Post
+     0.01s 0.055% 77.20%      4.83s 26.79%  project/internal/core/app.(*BaseApp).runLoop
+     0.01s 0.055% 77.26%      2.94s 16.31%  project/internal/server/routeragent.(*Module).handleConn.func1
+     0.01s 0.055% 77.32%      0.19s  1.05%  project/internal/server/routeragent.(*Module).pickTargets
+     0.01s 0.055% 77.37%      0.33s  1.83%  project/internal/server/routeragent.(*Module).post
+     0.01s 0.055% 77.43%      0.93s  5.16%  project/internal/server/routeragent.(*Module).startPeerLoops.func1.1.1
+     0.01s 0.055% 77.48%      0.49s  2.72%  project/internal/server/routeragent.(*RemoteSeqMap).Alloc
+     0.01s 0.055% 77.54%      0.23s  1.28%  project/internal/server/routeragent.(*RemoteSeqMap).Pop
+     0.01s 0.055% 77.59%      2.42s 13.42%  project/internal/server/routeragent.(*tcpPeerLink).writeBatch
+     0.01s 0.055% 77.65%      2.55s 14.14%  project/internal/server/routeragent.(*tcpPeerLink).writeLoop
+     0.01s 0.055% 77.70%      0.43s  2.38%  runtime.(*mcache).refill
+     0.01s 0.055% 77.76%      0.12s  0.67%  runtime.(*sweepLocked).sweep
+     0.01s 0.055% 77.81%      0.17s  0.94%  runtime.chanrecv2
+     0.01s 0.055% 77.87%      0.12s  0.67%  runtime.convTstring
+     0.01s 0.055% 77.93%      0.68s  3.77%  runtime.gcBgMarkWorker.func2
+     0.01s 0.055% 77.98%      0.12s  0.67%  runtime.heapSetTypeNoHeader (inline)
+     0.01s 0.055% 78.04%      0.46s  2.55%  runtime.injectglist
+     0.01s 0.055% 78.09%      0.25s  1.39%  runtime.mPark (inline)
+     0.01s 0.055% 78.15%      0.31s  1.72%  runtime.makeslice
+     0.01s 0.055% 78.20%      0.10s  0.55%  runtime.morestack
+     0.01s 0.055% 78.26%      0.58s  3.22%  runtime.newobject
+     0.01s 0.055% 78.31%      0.24s  1.33%  runtime.notesleep
+     0.01s 0.055% 78.37%      0.26s  1.44%  runtime.ready
+     0.01s 0.055% 78.42%      0.19s  1.05%  runtime.scanSpan
+     0.01s 0.055% 78.48%      0.42s  2.33%  runtime.selectnbrecv
+     0.01s 0.055% 78.54%      0.15s  0.83%  runtime.semawakeup (inline)
+     0.01s 0.055% 78.59%      0.78s  4.33%  runtime.unlock (inline)
+     0.01s 0.055% 78.65%      0.51s  2.83%  runtime.wakep
+     0.01s 0.055% 78.70%      1.93s 10.70%  syscall.read
+         0     0% 78.70%      4.73s 26.23%  internal/poll.ignoringEINTRIO (inline)
+         0     0% 78.70%      4.83s 26.79%  main.execute
+         0     0% 78.70%      4.83s 26.79%  main.main
+         0     0% 78.70%      2.12s 11.76%  net.(*netFD).Read
+         0     0% 78.70%      4.83s 26.79%  project/internal/core/app.(*BaseApp).Startup
+         0     0% 78.70%      1.53s  8.49%  project/internal/server/routeragent.(*Module).startPeerLoops.func1
+         0     0% 78.70%      0.58s  3.22%  project/internal/server/routeragent.peerKey (inline)
+         0     0% 78.70%      0.33s  1.83%  runtime.(*mcentral).cacheSpan
+         0     0% 78.70%      0.30s  1.66%  runtime.(*mcentral).grow
+         0     0% 78.70%      0.25s  1.39%  runtime.(*mheap).alloc.func1
+         0     0% 78.70%      0.10s  0.55%  runtime.(*unwinder).next
+         0     0% 78.70%      0.12s  0.67%  runtime.bgsweep
+         0     0% 78.70%      0.32s  1.77%  runtime.futexsleep
+         0     0% 78.70%      0.97s  5.38%  runtime.futexwakeup
+         0     0% 78.70%      0.79s  4.38%  runtime.gcBgMarkWorker
+         0     0% 78.70%      0.67s  3.72%  runtime.gcDrain
+         0     0% 78.70%      0.63s  3.49%  runtime.gcDrainMarkWorkerDedicated (inline)
+         0     0% 78.70%      0.26s  1.44%  runtime.goready (inline)
+         0     0% 78.70%      0.33s  1.83%  runtime.injectglist.func1
+         0     0% 78.70%      1.22s  6.77%  runtime.lock (inline)
+         0     0% 78.70%      1.22s  6.77%  runtime.lockWithRank (inline)
+         0     0% 78.70%      4.83s 26.79%  runtime.main
+         0     0% 78.70%      0.13s  0.72%  runtime.markroot
+         0     0% 78.70%      3.36s 18.64%  runtime.mcall
+         0     0% 78.70%      0.10s  0.55%  runtime.newstack
+         0     0% 78.70%      0.83s  4.60%  runtime.notewakeup
+         0     0% 78.70%      3.35s 18.58%  runtime.park_m
+         0     0% 78.70%      0.64s  3.55%  runtime.procyield (inline)
+         0     0% 78.70%      0.21s  1.16%  runtime.resetspinning
+         0     0% 78.70%      0.63s  3.49%  runtime.selectnbsend
+         0     0% 78.70%      0.26s  1.44%  runtime.send
+         0     0% 78.70%      0.24s  1.33%  runtime.send.goready.func1
+         0     0% 78.70%      0.76s  4.22%  runtime.startm
+         0     0% 78.70%      0.16s  0.89%  runtime.unlock2Wake
+         0     0% 78.70%      0.77s  4.27%  runtime.unlockWithRank (inline)
+         0     0% 78.70%      2.73s 15.14%  syscall.write

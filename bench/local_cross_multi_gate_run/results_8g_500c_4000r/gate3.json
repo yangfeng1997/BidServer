@@ -1,0 +1,21 @@
+{
+  "addr": "127.0.0.1:7403",
+  "clients": 500,
+  "requests_per_client": 4000,
+  "sent": 2000000,
+  "ok": 2000000,
+  "failed": 0,
+  "reconnects": 0,
+  "elapsed_ms": 47222,
+  "qps": 42353.04764804621,
+  "failures": {},
+  "latency": {
+    "count": 2000000,
+    "min_ns": 500815,
+    "avg_ns": 11747358,
+    "p50_ns": 11486715,
+    "p90_ns": 15763413,
+    "p99_ns": 21089426,
+    "max_ns": 55749666
+  }
+}

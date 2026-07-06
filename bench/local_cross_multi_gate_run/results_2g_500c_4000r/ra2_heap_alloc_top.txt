@@ -1,0 +1,12 @@
+File: routeragent
+Build ID: 7e4448ef6257aa6034c66dce374f8382478e9cf1
+Type: alloc_space
+Time: 2026-07-06 15:59:12 CST
+Showing nodes accounting for 1619.23MB, 98.89% of 1637.43MB total
+Dropped 118 nodes (cum <= 8.19MB)
+      flat  flat%   sum%        cum   cum%
+  473.42MB 28.91% 28.91%   473.42MB 28.91%  project/internal/server/routeragent.(*UDSConn).readLoop
+  446.20MB 27.25% 56.16%   832.73MB 50.86%  project/internal/server/routeragent.(*tcpPeerLink).readLoop
+  386.54MB 23.61% 79.77%   386.54MB 23.61%  project/internal/server/routeragent.(*Module).handleIncomingPeer.func1
+  311.52MB 19.03% 98.79%   311.52MB 19.03%  project/internal/server/routeragent.(*Module).handleConn
+    1.56MB 0.095% 98.89%   834.29MB 50.95%  project/internal/server/routeragent.(*Module).handleIncomingPeer

@@ -259,7 +259,7 @@ func (m *Module) handleRemote(frame routeragent.Frame) {
 		}
 		rspHead.DestNodeID = head.SrcNodeID
 		rspHead.ErrCode = uint32(code)
-		_ = m.client.Send(routeragent.Frame{Type: routeragent.FrameRpcResponse, Header: routeragent.EncodeRPCWireHeader(rspHead)})
+		_ = m.client.SendRPCFrame(routeragent.FrameRpcResponse, rspHead, nil)
 	}
 }
 

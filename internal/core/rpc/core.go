@@ -121,6 +121,11 @@ func (c *Core) Send(t Target, route string, body []byte, ctx Ctx) {
 
 // 处理回包
 func (c *Core) OnResponse(seq uint64, payload []byte, code errcode.ErrCode) {
+	c.OnResponseWithRelease(seq, payload, code, nil)
+}
+
+// OnResponseWithRelease 处理回包，并在回调执行完成后释放 payload 所属资源。
+func (c *Core) OnResponseWithRelease(seq uint64, payload []byte, code errcode.ErrCode, release func()) {
 	c.mu.Lock()
 	f := c.pending[seq]
 	if f != nil {
@@ -128,12 +133,20 @@ func (c *Core) OnResponse(seq uint64, payload []byte, code errcode.ErrCode) {
 	}
 	c.mu.Unlock()
 	if f == nil {
+		if release != nil {
+			release()
+		}
 		return
 	}
 	if f.span != nil {
 		f.span.Finish()
 	}
-	c.dispatch(func() { f.onResult(payload, code) })
+	c.dispatch(func() {
+		if release != nil {
+			defer release()
+		}
+		f.onResult(payload, code)
+	})
 }
 
 func (c *Core) scanLoop() {

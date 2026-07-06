@@ -3,6 +3,7 @@ package routeragent
 import (
 	"encoding/binary"
 	"fmt"
+	"unsafe"
 )
 
 // RA 透传的 RPC 头部
@@ -21,34 +22,67 @@ type RPCWireHeader struct {
 
 // 编码头部为字节切片
 func EncodeRPCWireHeader(h RPCWireHeader) []byte {
+	out, _ := AppendRPCWireHeader(nil, h)
+	return out
+}
+
+func RPCWireHeaderLen(h RPCWireHeader) (int, error) {
 	keyLen := len(h.RoutingKey)
 	routeLen := len(h.Route)
-	out := make([]byte, 8+4+1+8+8+4+4+4+2+keyLen+2+routeLen)
-	pos := 0
-	binary.BigEndian.PutUint64(out[pos:pos+8], h.SeqID)
+	if keyLen > 0xFFFF {
+		return 0, fmt.Errorf("rpc header routing key too large: %d", keyLen)
+	}
+	if routeLen > 0xFFFF {
+		return 0, fmt.Errorf("rpc header route too large: %d", routeLen)
+	}
+	return 8 + 4 + 1 + 8 + 8 + 4 + 4 + 4 + 2 + keyLen + 2 + routeLen, nil
+}
+
+// AppendRPCWireHeader 将 RPC 头编码追加到 dst，wire format 与 EncodeRPCWireHeader 完全一致。
+func AppendRPCWireHeader(dst []byte, h RPCWireHeader) ([]byte, error) {
+	headerLen, err := RPCWireHeaderLen(h)
+	if err != nil {
+		return nil, err
+	}
+	keyLen := len(h.RoutingKey)
+	routeLen := len(h.Route)
+	pos := len(dst)
+	need := pos + headerLen
+	if cap(dst) < need {
+		newCap := cap(dst) * 2
+		if newCap < need {
+			newCap = need
+		}
+		grown := make([]byte, need, newCap)
+		copy(grown, dst)
+		dst = grown
+	} else {
+		dst = dst[:need]
+	}
+	binary.BigEndian.PutUint64(dst[pos:pos+8], h.SeqID)
 	pos += 8
-	binary.BigEndian.PutUint32(out[pos:pos+4], h.ServerType)
+	binary.BigEndian.PutUint32(dst[pos:pos+4], h.ServerType)
 	pos += 4
-	out[pos] = h.RoutingMode
+	dst[pos] = h.RoutingMode
 	pos++
-	binary.BigEndian.PutUint64(out[pos:pos+8], uint64(h.DeadlineMs))
+	binary.BigEndian.PutUint64(dst[pos:pos+8], uint64(h.DeadlineMs))
 	pos += 8
-	binary.BigEndian.PutUint64(out[pos:pos+8], h.WaiterID)
+	binary.BigEndian.PutUint64(dst[pos:pos+8], h.WaiterID)
 	pos += 8
-	binary.BigEndian.PutUint32(out[pos:pos+4], h.SrcNodeID)
+	binary.BigEndian.PutUint32(dst[pos:pos+4], h.SrcNodeID)
 	pos += 4
-	binary.BigEndian.PutUint32(out[pos:pos+4], h.DestNodeID)
+	binary.BigEndian.PutUint32(dst[pos:pos+4], h.DestNodeID)
 	pos += 4
-	binary.BigEndian.PutUint32(out[pos:pos+4], h.ErrCode)
+	binary.BigEndian.PutUint32(dst[pos:pos+4], h.ErrCode)
 	pos += 4
-	binary.BigEndian.PutUint16(out[pos:pos+2], uint16(keyLen))
+	binary.BigEndian.PutUint16(dst[pos:pos+2], uint16(keyLen))
 	pos += 2
-	copy(out[pos:pos+keyLen], h.RoutingKey)
+	copy(dst[pos:pos+keyLen], h.RoutingKey)
 	pos += keyLen
-	binary.BigEndian.PutUint16(out[pos:pos+2], uint16(routeLen))
+	binary.BigEndian.PutUint16(dst[pos:pos+2], uint16(routeLen))
 	pos += 2
-	copy(out[pos:pos+routeLen], h.Route)
-	return out
+	copy(dst[pos:pos+routeLen], h.Route)
+	return dst, nil
 }
 
 // 解码字节切片为头部
@@ -79,13 +113,20 @@ func DecodeRPCWireHeader(data []byte) (RPCWireHeader, error) {
 	if len(data) < pos+keyLen+2 {
 		return RPCWireHeader{}, fmt.Errorf("rpc header key length mismatch")
 	}
-	h.RoutingKey = string(data[pos : pos+keyLen])
+	h.RoutingKey = bytesToString(data[pos : pos+keyLen])
 	pos += keyLen
 	routeLen := int(binary.BigEndian.Uint16(data[pos : pos+2]))
 	pos += 2
 	if len(data) < pos+routeLen {
 		return RPCWireHeader{}, fmt.Errorf("rpc header route length mismatch")
 	}
-	h.Route = string(data[pos : pos+routeLen])
+	h.Route = bytesToString(data[pos : pos+routeLen])
 	return h, nil
+}
+
+func bytesToString(b []byte) string {
+	if len(b) == 0 {
+		return ""
+	}
+	return unsafe.String(unsafe.SliceData(b), len(b))
 }

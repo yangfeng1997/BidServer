@@ -1,0 +1,21 @@
+{
+  "addr": "127.0.0.1:7006",
+  "clients": 250,
+  "requests_per_client": 3000,
+  "sent": 750000,
+  "ok": 750000,
+  "failed": 0,
+  "reconnects": 0,
+  "elapsed_ms": 42472,
+  "qps": 17658.37880121738,
+  "failures": {},
+  "latency": {
+    "count": 750000,
+    "min_ns": 250225,
+    "avg_ns": 13990010,
+    "p50_ns": 12755304,
+    "p90_ns": 22945636,
+    "p99_ns": 34228341,
+    "max_ns": 69711268
+  }
+}

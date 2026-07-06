@@ -134,6 +134,10 @@ func (s lobbyFrameSender) Send(frame routeragent.Frame) error {
 	return nil
 }
 
+func (s lobbyFrameSender) SendRPCFrame(frameType routeragent.FrameType, head routeragent.RPCWireHeader, body []byte) error {
+	return s.Send(routeragent.Frame{Type: frameType, Header: routeragent.EncodeRPCWireHeader(head), Body: body})
+}
+
 func u32toa(v uint32) string {
 	var buf [10]byte
 	i := len(buf)

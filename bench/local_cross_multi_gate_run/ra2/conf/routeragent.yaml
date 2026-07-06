@@ -1,0 +1,31 @@
+sock_path: "/tmp/bidserver_cross_ra2.sock"
+listen_addr: "127.0.0.1:7301"
+heartbeat_sec: 30
+logger_group:
+  main:
+    level: warn
+    format: console
+    stderr_also: false
+    dir: "../log"
+    basename: routeragent2
+    max_size_mb: 100
+    max_backups: 24
+    rotate_by_hour: true
+  res:
+    level: warn
+    format: console
+    stderr_also: false
+    dir: "../log"
+    basename: routeragent2_res
+    max_size_mb: 100
+    max_backups: 24
+    rotate_by_hour: true
+  tracing:
+    level: warn
+    format: console
+    stderr_also: false
+    dir: "../log"
+    basename: routeragent2_tracing
+    max_size_mb: 100
+    max_backups: 24
+    rotate_by_hour: true

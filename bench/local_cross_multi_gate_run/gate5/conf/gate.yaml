@@ -1,0 +1,33 @@
+listen_tcp: "0.0.0.0:7405"
+listen_ws: "0.0.0.0:7505"
+max_conn: 20000
+heartbeat_sec: 30
+routeragent_sock_path: "/tmp/bidserver_cross_ra1.sock"
+logger_group:
+  main:
+    level: warn
+    format: console
+    stderr_also: false
+    dir: "../log"
+    basename: gatesvr5
+    max_size_mb: 100
+    max_backups: 24
+    rotate_by_hour: true
+  res:
+    level: warn
+    format: console
+    stderr_also: false
+    dir: "../log"
+    basename: gatesvr5_res
+    max_size_mb: 100
+    max_backups: 24
+    rotate_by_hour: true
+  tracing:
+    level: warn
+    format: console
+    stderr_also: false
+    dir: "../log"
+    basename: gatesvr5_tracing
+    max_size_mb: 100
+    max_backups: 24
+    rotate_by_hour: true

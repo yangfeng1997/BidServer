@@ -1,0 +1,31 @@
+File: routeragent
+Build ID: 7e4448ef6257aa6034c66dce374f8382478e9cf1
+Type: alloc_space
+Time: 2026-07-06 15:59:12 CST
+Showing nodes accounting for 2457.92MB, 99.37% of 2473.53MB total
+Dropped 122 nodes (cum <= 12.37MB)
+      flat  flat%   sum%        cum   cum%
+  623.05MB 25.19% 25.19%   623.05MB 25.19%  project/internal/server/routeragent.AppendRPCWireHeader
+  486.87MB 19.68% 44.87%   486.87MB 19.68%  project/internal/server/routeragent.(*UDSConn).readLoop
+  424.94MB 17.18% 62.05%   781.97MB 31.61%  project/internal/server/routeragent.(*tcpPeerLink).readLoop
+  357.03MB 14.43% 76.49%   357.03MB 14.43%  project/internal/server/routeragent.(*Module).startPeerLoops.func1.1
+  322.52MB 13.04% 89.52%   322.52MB 13.04%  project/internal/server/routeragent.(*Module).handleConn
+   65.50MB  2.65% 92.17%    65.50MB  2.65%  project/internal/server/routeragent.(*RemoteSeqMap).Alloc
+   65.50MB  2.65% 94.82%   124.01MB  5.01%  project/internal/server/routeragent.peerKey (inline)
+      59MB  2.39% 97.21%    61.01MB  2.47%  fmt.Sprintf
+      50MB  2.02% 99.23%       50MB  2.02%  project/internal/server/routeragent.(*Module).pickTargets
+       3MB  0.12% 99.35%   362.52MB 14.66%  project/internal/server/routeragent.(*Module).sendPeerOutbound
+    0.50MB  0.02% 99.37%   868.56MB 35.11%  project/internal/core/app.(*BaseApp).runLoop
+         0     0% 99.37%   869.06MB 35.13%  main.execute
+         0     0% 99.37%   869.06MB 35.13%  main.main
+         0     0% 99.37%   869.06MB 35.13%  project/internal/core/app.(*BaseApp).Startup
+         0     0% 99.37%   536.53MB 21.69%  project/internal/server/routeragent.(*Module).forwardRPC
+         0     0% 99.37%   537.04MB 21.71%  project/internal/server/routeragent.(*Module).handleConn.func1
+         0     0% 99.37%   537.04MB 21.71%  project/internal/server/routeragent.(*Module).handleFrame
+         0     0% 99.37%   331.03MB 13.38%  project/internal/server/routeragent.(*Module).handlePeerFrame
+         0     0% 99.37%   536.53MB 21.69%  project/internal/server/routeragent.(*Module).routeFrame
+         0     0% 99.37%   486.53MB 19.67%  project/internal/server/routeragent.(*Module).sendPeerOrQueue
+         0     0% 99.37%   781.97MB 31.61%  project/internal/server/routeragent.(*Module).startPeerLoops.func1
+         0     0% 99.37%   331.03MB 13.38%  project/internal/server/routeragent.(*Module).startPeerLoops.func1.1.1
+         0     0% 99.37%   623.05MB 25.19%  project/internal/server/routeragent.EncodeRPCWireHeader (inline)
+         0     0% 99.37%   870.58MB 35.20%  runtime.main

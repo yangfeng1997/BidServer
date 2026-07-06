@@ -1,0 +1,33 @@
+listen_tcp: "0.0.0.0:7408"
+listen_ws: "0.0.0.0:7508"
+max_conn: 20000
+heartbeat_sec: 30
+routeragent_sock_path: "/tmp/bidserver_cross_ra1.sock"
+logger_group:
+  main:
+    level: warn
+    format: console
+    stderr_also: false
+    dir: "../log"
+    basename: gatesvr8
+    max_size_mb: 100
+    max_backups: 24
+    rotate_by_hour: true
+  res:
+    level: warn
+    format: console
+    stderr_also: false
+    dir: "../log"
+    basename: gatesvr8_res
+    max_size_mb: 100
+    max_backups: 24
+    rotate_by_hour: true
+  tracing:
+    level: warn
+    format: console
+    stderr_also: false
+    dir: "../log"
+    basename: gatesvr8_tracing
+    max_size_mb: 100
+    max_backups: 24
+    rotate_by_hour: true

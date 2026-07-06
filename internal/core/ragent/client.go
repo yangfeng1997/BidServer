@@ -13,6 +13,10 @@ import (
 	"project/internal/server/routeragent"
 )
 
+var frameBufferPool = sync.Pool{
+	New: func() any { return make([]byte, 0, 4096) },
+}
+
 type Client struct {
 	nodeID  uint32
 	sock    string
@@ -22,9 +26,15 @@ type Client struct {
 	mu     sync.Mutex
 	conn   net.Conn
 	core   *corerpc.Core
-	sendCh chan routeragent.Frame
+	sendCh chan outboundFrame
 	done   chan struct{}
 	once   sync.Once
+}
+
+type outboundFrame struct {
+	frame   routeragent.Frame
+	wire    routeragent.RPCWireHeader
+	hasWire bool
 }
 
 func NewClient(nodeID uint32, sock string, poster corerpc.Poster, onFrame func(routeragent.Frame)) *Client {
@@ -50,11 +60,12 @@ func (c *Client) Connect() error {
 		_ = raw.Close()
 		return fmt.Errorf("send routeragent handshake: %w", err)
 	}
-	ack, err := readFrame(raw)
+	ack, ackBuf, err := readFrame(raw)
 	if err != nil {
 		_ = raw.Close()
 		return fmt.Errorf("read routeragent handshake ack: %w", err)
 	}
+	defer releaseFrameBuffer(ackBuf)
 	if ack.Type != routeragent.FrameHandshakeAck || len(ack.Body) == 0 || ack.Body[0] == 0 {
 		_ = raw.Close()
 		return fmt.Errorf("routeragent handshake rejected")
@@ -62,7 +73,7 @@ func (c *Client) Connect() error {
 
 	c.mu.Lock()
 	c.conn = raw
-	c.sendCh = make(chan routeragent.Frame, 4096)
+	c.sendCh = make(chan outboundFrame, 4096)
 	c.done = make(chan struct{})
 	c.mu.Unlock()
 
@@ -112,10 +123,18 @@ func (c *Client) SendFrame(target corerpc.Target, header corerpc.Header, body []
 	if header.SeqID != 0 {
 		frameType = routeragent.FrameRpcRequest
 	}
-	return c.Send(routeragent.Frame{Type: frameType, Header: routeragent.EncodeRPCWireHeader(wire), Body: body})
+	return c.send(outboundFrame{frame: routeragent.Frame{Type: frameType, Body: body}, wire: wire, hasWire: true})
 }
 
 func (c *Client) Send(frame routeragent.Frame) error {
+	return c.send(outboundFrame{frame: frame})
+}
+
+func (c *Client) SendRPCFrame(frameType routeragent.FrameType, header routeragent.RPCWireHeader, body []byte) error {
+	return c.send(outboundFrame{frame: routeragent.Frame{Type: frameType, Body: body}, wire: header, hasWire: true})
+}
+
+func (c *Client) send(frame outboundFrame) error {
 	c.mu.Lock()
 	sendCh := c.sendCh
 	done := c.done
@@ -141,14 +160,14 @@ func (c *Client) writeLoop(raw net.Conn) {
 			return
 		case frame := <-c.sendCh:
 			var err error
-			buf, err = routeragent.AppendFrame(buf[:0], frame)
+			buf, err = appendOutboundFrame(buf[:0], frame)
 			if err != nil {
 				continue
 			}
 			for drained := 1; drained < clientWriteBatchMaxFrames; drained++ {
 				select {
 				case f2 := <-c.sendCh:
-					buf, _ = routeragent.AppendFrame(buf, f2)
+					buf, _ = appendOutboundFrame(buf, f2)
 				default:
 					goto flushNow
 				}
@@ -164,25 +183,42 @@ func (c *Client) writeLoop(raw net.Conn) {
 
 func (c *Client) readLoop(raw net.Conn) {
 	for {
-		frame, err := readFrame(raw)
+		frame, buf, err := readFrame(raw)
 		if err != nil {
 			_ = c.Close()
 			return
+		}
+		released := false
+		release := func() {
+			if released {
+				return
+			}
+			released = true
+			releaseFrameBuffer(buf)
 		}
 		switch frame.Type {
 		case routeragent.FrameRpcResponse:
 			head, err := routeragent.DecodeRPCWireHeader(frame.Header)
 			if err != nil || c.core == nil {
+				release()
 				continue
 			}
-			c.core.OnResponse(head.SeqID, frame.Body, errcode.ErrCode(head.ErrCode))
+			c.core.OnResponseWithRelease(head.SeqID, frame.Body, errcode.ErrCode(head.ErrCode), release)
 		case routeragent.FrameRpcRequest, routeragent.FrameRpcNotify:
 			if c.onFrame != nil && c.poster != nil {
 				frame := frame
-				c.poster.Post(func() { c.onFrame(frame) })
+				c.poster.Post(func() {
+					defer release()
+					c.onFrame(frame)
+				})
+			} else {
+				release()
 			}
 		case routeragent.FrameHeartbeat:
+			release()
 			_ = c.Send(routeragent.Frame{Type: routeragent.FrameHeartbeat})
+		default:
+			release()
 		}
 	}
 }
@@ -209,27 +245,80 @@ func writeFrame(w io.Writer, frame routeragent.Frame) error {
 	return err
 }
 
-func readFrame(r io.Reader) (routeragent.Frame, error) {
-	hdr := make([]byte, 4)
-	if _, err := io.ReadFull(r, hdr); err != nil {
-		return routeragent.Frame{}, err
+func appendOutboundFrame(dst []byte, out outboundFrame) ([]byte, error) {
+	if !out.hasWire {
+		return routeragent.AppendFrame(dst, out.frame)
 	}
-	length := int(binary.BigEndian.Uint32(hdr))
+	headLen, err := routeragent.RPCWireHeaderLen(out.wire)
+	if err != nil {
+		return nil, err
+	}
+	if headLen > 0xFFFF {
+		return nil, fmt.Errorf("frame header too large: %d", headLen)
+	}
+	bodyLen := len(out.frame.Body)
+	length := 1 + 2 + headLen + bodyLen
+	pos := len(dst)
+	need := pos + 4 + length
+	if cap(dst) < need {
+		newCap := cap(dst) * 2
+		if newCap < need {
+			newCap = need
+		}
+		grown := make([]byte, need, newCap)
+		copy(grown, dst)
+		dst = grown
+	} else {
+		dst = dst[:need]
+	}
+	binary.BigEndian.PutUint32(dst[pos:pos+4], uint32(length))
+	dst[pos+4] = byte(out.frame.Type)
+	binary.BigEndian.PutUint16(dst[pos+5:pos+7], uint16(headLen))
+	if _, err := routeragent.AppendRPCWireHeader(dst[pos+7:pos+7], out.wire); err != nil {
+		return nil, err
+	}
+	copy(dst[pos+7+headLen:pos+7+headLen+bodyLen], out.frame.Body)
+	return dst, nil
+}
+
+func readFrame(r io.Reader) (routeragent.Frame, []byte, error) {
+	var hdr [4]byte
+	if _, err := io.ReadFull(r, hdr[:]); err != nil {
+		return routeragent.Frame{}, nil, err
+	}
+	length := int(binary.BigEndian.Uint32(hdr[:]))
 	if length < 3 {
-		return routeragent.Frame{}, fmt.Errorf("invalid routeragent frame length %d", length)
+		return routeragent.Frame{}, nil, fmt.Errorf("invalid routeragent frame length %d", length)
 	}
-	buf := make([]byte, length)
+	buf := getFrameBuffer(length)
 	if _, err := io.ReadFull(r, buf); err != nil {
-		return routeragent.Frame{}, err
+		releaseFrameBuffer(buf)
+		return routeragent.Frame{}, nil, err
 	}
 	headLen := int(binary.BigEndian.Uint16(buf[1:3]))
 	bodyLen := length - 3 - headLen
 	if bodyLen < 0 {
-		return routeragent.Frame{}, fmt.Errorf("invalid routeragent frame body length %d", bodyLen)
+		releaseFrameBuffer(buf)
+		return routeragent.Frame{}, nil, fmt.Errorf("invalid routeragent frame body length %d", bodyLen)
 	}
 	return routeragent.Frame{
 		Type:   routeragent.FrameType(buf[0]),
 		Header: buf[3 : 3+headLen],
 		Body:   buf[3+headLen : 3+headLen+bodyLen],
-	}, nil
+	}, buf, nil
+}
+
+func getFrameBuffer(length int) []byte {
+	buf := frameBufferPool.Get().([]byte)
+	if cap(buf) < length {
+		return make([]byte, length)
+	}
+	return buf[:length]
+}
+
+func releaseFrameBuffer(buf []byte) {
+	if cap(buf) > 256*1024 {
+		return
+	}
+	frameBufferPool.Put(buf[:0])
 }

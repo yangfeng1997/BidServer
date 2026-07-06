@@ -1,0 +1,21 @@
+File: routeragent
+Build ID: 7e4448ef6257aa6034c66dce374f8382478e9cf1
+Type: alloc_space
+Time: 2026-07-06 15:29:25 CST
+Showing nodes accounting for 7560.03MB, 99.73% of 7580.25MB total
+Dropped 147 nodes (cum <= 37.90MB)
+      flat  flat%   sum%        cum   cum%
+ 3803.75MB 50.18% 50.18%  3803.75MB 50.18%  project/internal/server/routeragent.(*UDSConn).readLoop
+ 2501.69MB 33.00% 83.18%  2502.70MB 33.02%  project/internal/server/routeragent.(*Module).handleConn
+ 1189.59MB 15.69% 98.88%  1189.59MB 15.69%  project/internal/server/routeragent.AppendRPCWireHeader
+   64.50MB  0.85% 99.73%    64.50MB  0.85%  project/internal/server/routeragent.(*Module).pickTargets
+    0.50MB 0.0066% 99.73%  1255.09MB 16.56%  project/internal/core/app.(*BaseApp).runLoop
+         0     0% 99.73%  1256.09MB 16.57%  main.execute
+         0     0% 99.73%  1256.09MB 16.57%  main.main
+         0     0% 99.73%  1256.09MB 16.57%  project/internal/core/app.(*BaseApp).Startup
+         0     0% 99.73%  1254.09MB 16.54%  project/internal/server/routeragent.(*Module).forwardRPC
+         0     0% 99.73%  1254.59MB 16.55%  project/internal/server/routeragent.(*Module).handleConn.func1
+         0     0% 99.73%  1254.59MB 16.55%  project/internal/server/routeragent.(*Module).handleFrame
+         0     0% 99.73%  1254.09MB 16.54%  project/internal/server/routeragent.(*Module).routeFrame
+         0     0% 99.73%  1189.59MB 15.69%  project/internal/server/routeragent.EncodeRPCWireHeader (inline)
+         0     0% 99.73%  1257.59MB 16.59%  runtime.main
