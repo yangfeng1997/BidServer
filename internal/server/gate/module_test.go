@@ -17,12 +17,12 @@ type testConn struct {
 func (c *testConn) Send(data []byte) {
 	c.sent = append(c.sent, append([]byte(nil), data...))
 }
-func (c *testConn) Close() error               { return nil }
-func (c *testConn) RemoteAddr() string         { return c.addr }
-func (c *testConn) Done() <-chan struct{}      { return nil }
-func (c *testConn) LastRecvUnixNano() int64    { return 0 }
-func (c *testConn) TouchRecv()                 {}
-func (c *testConn) Recv() <-chan *codec.Packet { return nil }
+func (c *testConn) Close() error              { return nil }
+func (c *testConn) RemoteAddr() string        { return c.addr }
+func (c *testConn) Done() <-chan struct{}     { return nil }
+func (c *testConn) LastRecvUnixNano() int64   { return 0 }
+func (c *testConn) TouchRecv()                {}
+func (c *testConn) Recv() <-chan codec.Packet { return nil }
 
 func TestGateRemoteBindSetBoundAndSendToClient(t *testing.T) {
 	m := NewModule()

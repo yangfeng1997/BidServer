@@ -5,9 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	_ "net/http/pprof"
+	"net/http/pprof"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"time"
 
@@ -45,6 +46,7 @@ type BaseApp struct {
 	pprof         bool
 	pprofAddr     string
 	nodeID        string
+	nodeIDUint32  uint32
 	modulesMap    map[string]Module
 	modulesArray  []moduleWrapper
 	shutdownHooks []func()
@@ -56,6 +58,7 @@ func NewBaseApp(dieChan chan bool, daemon bool, pprof bool, pprofAddr string, no
 	if dieChan == nil {
 		dieChan = make(chan bool)
 	}
+	parsedNodeID, _ := nodeid.Parse(nodeID)
 
 	return &BaseApp{
 		dieChan:       dieChan,
@@ -65,6 +68,7 @@ func NewBaseApp(dieChan chan bool, daemon bool, pprof bool, pprofAddr string, no
 		pprof:         pprof,
 		pprofAddr:     pprofAddr,
 		nodeID:        nodeID,
+		nodeIDUint32:  parsedNodeID.Uint32(),
 		modulesMap:    make(map[string]Module),
 		shutdownHooks: append([]func(){}, shutdownHooks...),
 		reloadHooks:   append([]func() error{}, reloadHooks...),
@@ -140,7 +144,15 @@ func (app *BaseApp) startPprof() {
 		addr = "127.0.0.1:6060"
 	}
 
-	server := &http.Server{Addr: addr, Handler: nil}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	mux.HandleFunc("/metrics", app.metricsHandler)
+
+	server := &http.Server{Addr: addr, Handler: mux}
 	app.shutdownHooks = append(app.shutdownHooks, func() {
 		if err := server.Close(); err != nil && err != http.ErrServerClosed {
 			logger.Main.Error("close pprof server failed", logger.Err(err))
@@ -156,6 +168,35 @@ func (app *BaseApp) startPprof() {
 			logger.Main.Error("pprof server stopped", logger.Err(err))
 		}
 	}()
+}
+
+func (app *BaseApp) metricsHandler(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+	for _, wrapper := range app.modulesArray {
+		provider, ok := wrapper.module.(interface{ MetricsSnapshot() map[string]int64 })
+		if !ok {
+			continue
+		}
+		prefix := sanitizeMetricName(wrapper.name)
+		for key, val := range provider.MetricsSnapshot() {
+			_, _ = fmt.Fprintf(w, "%s_%s %d\n", prefix, sanitizeMetricName(key), val)
+		}
+	}
+}
+
+func sanitizeMetricName(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('_')
+		}
+	}
+	if b.Len() == 0 {
+		return "unknown"
+	}
+	return b.String()
 }
 
 func (app *BaseApp) runLoop() {
@@ -280,11 +321,7 @@ func (app *BaseApp) NodeID() string {
 }
 
 func (app *BaseApp) NodeIDUint32() uint32 {
-	id, err := nodeid.Parse(app.nodeID)
-	if err != nil {
-		return 0
-	}
-	return id.Uint32()
+	return app.nodeIDUint32
 }
 
 func (app *BaseApp) RegisterModule(module Module) error {

@@ -27,21 +27,36 @@ type Frame struct {
 
 // 编码帧为字节切片
 func EncodeFrame(f Frame) ([]byte, error) {
+	return AppendFrame(nil, f)
+}
+
+// AppendFrame 将帧编码追加到 dst，便于写循环复用缓冲区。
+func AppendFrame(dst []byte, f Frame) ([]byte, error) {
 	headLen := len(f.Header)
 	bodyLen := len(f.Body)
 	if headLen > 0xFFFF {
 		return nil, fmt.Errorf("frame header too large: %d", headLen)
 	}
 	length := 1 + 2 + headLen + bodyLen
-	out := make([]byte, 4+length)
-	binary.BigEndian.PutUint32(out[:4], uint32(length))
-	out[4] = byte(f.Type)
-	binary.BigEndian.PutUint16(out[5:7], uint16(headLen))
-	pos := 7
-	copy(out[pos:pos+headLen], f.Header)
-	pos += headLen
-	copy(out[pos:pos+bodyLen], f.Body)
-	return out, nil
+	pos := len(dst)
+	need := pos + 4 + length
+	if cap(dst) < need {
+		newCap := cap(dst) * 2
+		if newCap < need {
+			newCap = need
+		}
+		grown := make([]byte, need, newCap)
+		copy(grown, dst)
+		dst = grown
+	} else {
+		dst = dst[:need]
+	}
+	binary.BigEndian.PutUint32(dst[pos:pos+4], uint32(length))
+	dst[pos+4] = byte(f.Type)
+	binary.BigEndian.PutUint16(dst[pos+5:pos+7], uint16(headLen))
+	copy(dst[pos+7:pos+7+headLen], f.Header)
+	copy(dst[pos+7+headLen:pos+7+headLen+bodyLen], f.Body)
+	return dst, nil
 }
 
 // 编码 RPC 帧
@@ -66,8 +81,8 @@ func DecodeFrame(data []byte) (Frame, error) {
 	pos := 7
 	return Frame{
 		Type:   FrameType(data[4]),
-		Header: append([]byte(nil), data[pos:pos+headLen]...),
-		Body:   append([]byte(nil), data[pos+headLen:pos+headLen+bodyLen]...),
+		Header: data[pos : pos+headLen],
+		Body:   data[pos+headLen : pos+headLen+bodyLen],
 	}, nil
 }
 
@@ -84,5 +99,5 @@ func DecodeRouteBody(body []byte) (uint32, []byte, error) {
 	if len(body) < 4 {
 		return 0, nil, fmt.Errorf("route body too short")
 	}
-	return binary.BigEndian.Uint32(body[:4]), append([]byte(nil), body[4:]...), nil
+	return binary.BigEndian.Uint32(body[:4]), body[4:], nil
 }

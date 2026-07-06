@@ -197,11 +197,11 @@ type testConn struct {
 	addr string
 }
 
-func newTestConn(addr string) *testConn        { return &testConn{addr: addr} }
-func (c *testConn) Send([]byte)                {}
-func (c *testConn) Close() error               { return nil }
-func (c *testConn) RemoteAddr() string         { return c.addr }
-func (c *testConn) Done() <-chan struct{}      { return nil }
-func (c *testConn) LastRecvUnixNano() int64    { return 0 }
-func (c *testConn) TouchRecv()                 {}
-func (c *testConn) Recv() <-chan *codec.Packet { return nil }
+func newTestConn(addr string) *testConn       { return &testConn{addr: addr} }
+func (c *testConn) Send([]byte)               {}
+func (c *testConn) Close() error              { return nil }
+func (c *testConn) RemoteAddr() string        { return c.addr }
+func (c *testConn) Done() <-chan struct{}     { return nil }
+func (c *testConn) LastRecvUnixNano() int64   { return 0 }
+func (c *testConn) TouchRecv()                {}
+func (c *testConn) Recv() <-chan codec.Packet { return nil }

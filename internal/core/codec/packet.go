@@ -25,14 +25,31 @@ type Packet struct {
 // 编码为字节切片
 // 格式为 type + length3 + body
 func EncodePacket(p Packet) ([]byte, error) {
+	return AppendPacket(nil, p)
+}
+
+// AppendPacket 将 packet 编码追加到 dst。
+func AppendPacket(dst []byte, p Packet) ([]byte, error) {
 	if len(p.Body) > 0xFFFFFF {
 		return nil, fmt.Errorf("packet too large: %d", len(p.Body))
 	}
-	out := make([]byte, 4+len(p.Body))
-	out[0] = byte(p.Type)
-	putUint24(out[1:4], uint32(len(p.Body)))
-	copy(out[4:], p.Body)
-	return out, nil
+	pos := len(dst)
+	need := pos + 4 + len(p.Body)
+	if cap(dst) < need {
+		newCap := cap(dst) * 2
+		if newCap < need {
+			newCap = need
+		}
+		grown := make([]byte, need, newCap)
+		copy(grown, dst)
+		dst = grown
+	} else {
+		dst = dst[:need]
+	}
+	dst[pos] = byte(p.Type)
+	putUint24(dst[pos+1:pos+4], uint32(len(p.Body)))
+	copy(dst[pos+4:], p.Body)
+	return dst, nil
 }
 
 // 解码为 Packet

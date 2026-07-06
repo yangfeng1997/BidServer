@@ -32,6 +32,15 @@ func (g *GateDispatcher) HandlePacket(c conn.Connection, pkt *codec.Packet) erro
 	if pkt == nil {
 		return errcode.New(errcode.ERR_UNMARSHAL, "nil packet")
 	}
+	if pkt.Type == codec.PacketData {
+		sess := g.sessions.GetByConnID(c.RemoteAddr())
+		return g.HandleSessionPacket(sess, c, *pkt)
+	}
+	return g.HandleSessionPacket(nil, c, *pkt)
+}
+
+// HandleSessionPacket 处理已解析 session 的 packet，避免热路径重复计算连接地址。
+func (g *GateDispatcher) HandleSessionPacket(sess *session.Session, c conn.Connection, pkt codec.Packet) error {
 	switch pkt.Type {
 	case codec.PacketHandshake:
 		if g.handshakeHandler != nil {
@@ -49,7 +58,6 @@ func (g *GateDispatcher) HandlePacket(c conn.Connection, pkt *codec.Packet) erro
 		if err != nil {
 			return errcode.New(errcode.ERR_UNMARSHAL, err.Error())
 		}
-		sess := g.sessions.GetByConnID(c.RemoteAddr())
 		if sess == nil {
 			return errcode.New(errcode.ERR_UNAUTHED, "session not found")
 		}

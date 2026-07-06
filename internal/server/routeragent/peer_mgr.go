@@ -148,6 +148,9 @@ func (m *PeerMgr) enqueue(addr string, item peerOutbound) (startDial bool, err e
 		return false, errPeerQueueFull
 	}
 	m.pending[addr] = append(m.pending[addr], item)
+	if n := len(m.pending[addr]); n == peerPendingLimit/2 || n == peerPendingLimit*3/4 || n == peerPendingLimit-1 {
+		logger.Warn("routeragent peer pending queue high", logger.String("peer_key", addr), logger.Int("pending", n), logger.Int("limit", peerPendingLimit))
+	}
 	if peer.State != PeerConnecting && peer.State != PeerHandshaking {
 		peer.State = PeerConnecting
 		return true, nil
@@ -385,7 +388,7 @@ func (m *Module) dialPeerConn(addr string, serverType uint32) (*tcpPeerLink, str
 	stResp := make([]byte, 4)
 	io.ReadFull(conn, stResp)
 	logger.Info("routeragent peer handshake receive done", logger.String("peer_addr", addr), logger.String("peer_listen_addr", peerListenAddr), logger.String("listen_addr", listenAddr))
-	pl := &tcpPeerLink{conn: conn, addr: peerListenAddr, sendCh: make(chan Frame, 16384), done: make(chan struct{})}
+	pl := &tcpPeerLink{conn: conn, addr: peerListenAddr, sendCh: make(chan Frame, 16384), prioSendCh: make(chan Frame, 4096), done: make(chan struct{})}
 	return pl, peerListenAddr, nil
 }
 

@@ -10,6 +10,7 @@ package main
 //
 // 	./main
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -41,6 +42,8 @@ type config struct {
 	requests    int
 	quiet       bool
 	reportEvery time.Duration
+	jsonOutput  bool
+	csvOutput   bool
 }
 
 type failureKind string
@@ -71,13 +74,14 @@ func (e *checkError) Error() string { return e.err.Error() }
 func (e *checkError) Kind() failureKind { return e.kind }
 
 type benchResult struct {
-	sent      atomic.Int64
-	succeeded atomic.Int64
-	failed    atomic.Int64
-	latMu     sync.Mutex
-	latencies []time.Duration
-	failMu    sync.Mutex
-	failures  map[failureKind]int64
+	sent       atomic.Int64
+	succeeded  atomic.Int64
+	failed     atomic.Int64
+	latMu      sync.Mutex
+	latencies  []time.Duration
+	failMu     sync.Mutex
+	failures   map[failureKind]int64
+	reconnects atomic.Int64
 }
 
 func main() {
@@ -98,6 +102,8 @@ func parseFlags() config {
 	requests := flag.Int("requests", 1, "requests per client for benchmark mode")
 	quiet := flag.Bool("quiet", false, "suppress per-client benchmark errors")
 	reportEvery := flag.Duration("report-every", 0, "periodic benchmark progress interval, disabled when 0")
+	jsonOutput := flag.Bool("json", false, "print benchmark summary as JSON")
+	csvOutput := flag.Bool("csv", false, "print benchmark summary as one CSV row")
 	flag.Parse()
 
 	if *seq == 0 || *seq > 0xffff {
@@ -118,6 +124,8 @@ func parseFlags() config {
 		requests:    *requests,
 		quiet:       *quiet,
 		reportEvery: *reportEvery,
+		jsonOutput:  *jsonOutput,
+		csvOutput:   *csvOutput,
 	}
 }
 
@@ -187,10 +195,30 @@ func runBenchClient(cfg config, clientID int, result *benchResult) {
 		result.sent.Add(1)
 		_, latency, err := client.ping(seq, text, expected, cfg.timeout)
 		if err != nil {
+			kind := classifyFailure(err)
 			result.failed.Add(1)
-			result.addFailure(classifyFailure(err), 1)
+			result.addFailure(kind, 1)
 			if !cfg.quiet {
 				fmt.Fprintf(os.Stderr, "client=%d request=%d seq=%d text=%q: %v\n", clientID, i+1, seq, text, err)
+			}
+			if shouldReconnect(kind) {
+				client.close()
+				next, connErr := newClient(cfg.addr, cfg.timeout)
+				if connErr != nil {
+					client = nil
+					remaining := cfg.requests - i - 1
+					if remaining > 0 {
+						result.sent.Add(int64(remaining))
+						result.failed.Add(int64(remaining))
+						result.addFailure(failureConnect, int64(remaining))
+					}
+					if !cfg.quiet {
+						fmt.Fprintf(os.Stderr, "client=%d reconnect: %v\n", clientID, connErr)
+					}
+					return
+				}
+				result.reconnects.Add(1)
+				client = next
 			}
 			continue
 		}
@@ -340,6 +368,15 @@ func classifyFailure(err error) failureKind {
 	return "unknown"
 }
 
+func shouldReconnect(kind failureKind) bool {
+	switch kind {
+	case failureRead, failureSeqMismatch, failureCmdMismatch, failurePayloadMismatch, failureMessageDecode, failureMessageType, failurePacketType:
+		return true
+	default:
+		return false
+	}
+}
+
 func asCheckError(err error, target **checkError) bool {
 	if err == nil {
 		return false
@@ -370,29 +407,120 @@ func reportProgress(result *benchResult, started time.Time, every time.Duration,
 }
 
 func printSummary(cfg config, result *benchResult, elapsed time.Duration) {
+	summary := buildSummary(cfg, result, elapsed)
+	if cfg.jsonOutput {
+		data, err := json.MarshalIndent(summary, "", "  ")
+		if err != nil {
+			fatalf("marshal summary: %v", err)
+		}
+		fmt.Println(string(data))
+		return
+	}
+	if cfg.csvOutput {
+		printCSVSummary(summary)
+		return
+	}
+	fmt.Printf("benchmark done addr=%s clients=%d requests_per_client=%d sent=%d ok=%d failed=%d reconnects=%d elapsed=%s qps=%.2f\n",
+		summary.Addr, summary.Clients, summary.RequestsPerClient, summary.Sent, summary.OK, summary.Failed, summary.Reconnects, elapsed.Round(time.Millisecond), summary.QPS)
+	if summary.Failed > 0 {
+		fmt.Printf("failures %s\n", result.failureSummary())
+	}
+	if summary.Latency.Count == 0 {
+		return
+	}
+	fmt.Printf("latency min=%s avg=%s p50=%s p90=%s p99=%s max=%s\n",
+		time.Duration(summary.Latency.MinNs).Round(time.Microsecond),
+		time.Duration(summary.Latency.AvgNs).Round(time.Microsecond),
+		time.Duration(summary.Latency.P50Ns).Round(time.Microsecond),
+		time.Duration(summary.Latency.P90Ns).Round(time.Microsecond),
+		time.Duration(summary.Latency.P99Ns).Round(time.Microsecond),
+		time.Duration(summary.Latency.MaxNs).Round(time.Microsecond))
+}
+
+type benchSummary struct {
+	Addr              string                `json:"addr"`
+	Clients           int                   `json:"clients"`
+	RequestsPerClient int                   `json:"requests_per_client"`
+	Sent              int64                 `json:"sent"`
+	OK                int64                 `json:"ok"`
+	Failed            int64                 `json:"failed"`
+	Reconnects        int64                 `json:"reconnects"`
+	ElapsedMs         int64                 `json:"elapsed_ms"`
+	QPS               float64               `json:"qps"`
+	Failures          map[failureKind]int64 `json:"failures"`
+	Latency           latencySummary        `json:"latency"`
+}
+
+type latencySummary struct {
+	Count int   `json:"count"`
+	MinNs int64 `json:"min_ns"`
+	AvgNs int64 `json:"avg_ns"`
+	P50Ns int64 `json:"p50_ns"`
+	P90Ns int64 `json:"p90_ns"`
+	P99Ns int64 `json:"p99_ns"`
+	MaxNs int64 `json:"max_ns"`
+}
+
+func buildSummary(cfg config, result *benchResult, elapsed time.Duration) benchSummary {
 	result.latMu.Lock()
 	latencies := append([]time.Duration(nil), result.latencies...)
 	result.latMu.Unlock()
 	sort.Slice(latencies, func(i, j int) bool { return latencies[i] < latencies[j] })
-	ok := result.succeeded.Load()
-	failed := result.failed.Load()
-	sent := result.sent.Load()
-	qps := float64(ok) / elapsed.Seconds()
-	fmt.Printf("benchmark done addr=%s clients=%d requests_per_client=%d sent=%d ok=%d failed=%d elapsed=%s qps=%.2f\n",
-		cfg.addr, cfg.clients, cfg.requests, sent, ok, failed, elapsed.Round(time.Millisecond), qps)
-	if failed > 0 {
-		fmt.Printf("failures %s\n", result.failureSummary())
+
+	result.failMu.Lock()
+	failures := make(map[failureKind]int64, len(result.failures))
+	for k, v := range result.failures {
+		failures[k] = v
 	}
-	if len(latencies) == 0 {
-		return
+	result.failMu.Unlock()
+
+	summary := benchSummary{
+		Addr:              cfg.addr,
+		Clients:           cfg.clients,
+		RequestsPerClient: cfg.requests,
+		Sent:              result.sent.Load(),
+		OK:                result.succeeded.Load(),
+		Failed:            result.failed.Load(),
+		Reconnects:        result.reconnects.Load(),
+		ElapsedMs:         elapsed.Milliseconds(),
+		Failures:          failures,
 	}
-	fmt.Printf("latency min=%s avg=%s p50=%s p90=%s p99=%s max=%s\n",
-		latencies[0].Round(time.Microsecond),
-		avgLatency(latencies).Round(time.Microsecond),
-		percentile(latencies, 50).Round(time.Microsecond),
-		percentile(latencies, 90).Round(time.Microsecond),
-		percentile(latencies, 99).Round(time.Microsecond),
-		latencies[len(latencies)-1].Round(time.Microsecond))
+	if elapsed > 0 {
+		summary.QPS = float64(summary.OK) / elapsed.Seconds()
+	}
+	if len(latencies) > 0 {
+		summary.Latency = latencySummary{
+			Count: len(latencies),
+			MinNs: int64(latencies[0]),
+			AvgNs: int64(avgLatency(latencies)),
+			P50Ns: int64(percentile(latencies, 50)),
+			P90Ns: int64(percentile(latencies, 90)),
+			P99Ns: int64(percentile(latencies, 99)),
+			MaxNs: int64(latencies[len(latencies)-1]),
+		}
+	}
+	return summary
+}
+
+func printCSVSummary(s benchSummary) {
+	fmt.Println("addr,clients,requests_per_client,sent,ok,failed,reconnects,elapsed_ms,qps,latency_count,min_ns,avg_ns,p50_ns,p90_ns,p99_ns,max_ns")
+	fmt.Printf("%s,%d,%d,%d,%d,%d,%d,%d,%.2f,%d,%d,%d,%d,%d,%d,%d\n",
+		s.Addr,
+		s.Clients,
+		s.RequestsPerClient,
+		s.Sent,
+		s.OK,
+		s.Failed,
+		s.Reconnects,
+		s.ElapsedMs,
+		s.QPS,
+		s.Latency.Count,
+		s.Latency.MinNs,
+		s.Latency.AvgNs,
+		s.Latency.P50Ns,
+		s.Latency.P90Ns,
+		s.Latency.P99Ns,
+		s.Latency.MaxNs)
 }
 
 func (r *benchResult) failureSummary() string {

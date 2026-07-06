@@ -1,7 +1,6 @@
 package conn
 
 import (
-	"bytes"
 	"errors"
 	"io"
 	"net"
@@ -10,6 +9,7 @@ import (
 	"time"
 
 	"project/internal/core/codec"
+	"project/pkg/logger"
 )
 
 // 网络连接
@@ -20,8 +20,13 @@ type Connection interface {
 	Done() <-chan struct{}
 	LastRecvUnixNano() int64
 	TouchRecv()
-	Recv() <-chan *codec.Packet
+	Recv() <-chan codec.Packet
 }
+
+const (
+	tcpConnSendQueueSize = 256
+	tcpConnRecvQueueSize = 256
+)
 
 // 基于 net.Conn 的连接实现
 type TCPConn struct {
@@ -30,16 +35,16 @@ type TCPConn struct {
 	done      chan struct{}
 	closeOnce sync.Once
 	lastRecv  atomic.Int64
-	recvCh    chan *codec.Packet
+	recvCh    chan codec.Packet
 }
 
 // NewTCPConn 创建 TCP 连接包装
 func NewTCPConn(c net.Conn) *TCPConn {
 	t := &TCPConn{
 		conn:   c,
-		sendCh: make(chan []byte, 4096),
+		sendCh: make(chan []byte, tcpConnSendQueueSize),
 		done:   make(chan struct{}),
-		recvCh: make(chan *codec.Packet, 4096),
+		recvCh: make(chan codec.Packet, tcpConnRecvQueueSize),
 	}
 	t.TouchRecv()
 	go t.writeLoop()
@@ -52,14 +57,34 @@ func (c *TCPConn) Send(data []byte) {
 	if len(data) == 0 {
 		return
 	}
-	buf := append([]byte(nil), data...)
+	c.send(append([]byte(nil), data...))
+}
+
+// SendOwned 异步发送调用方移交所有权的数据，入队后调用方不得再修改 data。
+func (c *TCPConn) SendOwned(data []byte) {
+	if len(data) == 0 {
+		return
+	}
+	c.send(data)
+}
+
+func (c *TCPConn) send(data []byte) {
 	select {
 	case <-c.done:
 		return
-	case c.sendCh <- buf:
+	case c.sendCh <- data:
 	default:
-		// 发送队列满时丢弃，避免阻塞主循环
+		logger.Warn("tcp conn send queue full, drop packet", logger.String("remote", c.RemoteAddr()), logger.Int("queue_len", len(c.sendCh)), logger.Int("queue_cap", cap(c.sendCh)))
 	}
+}
+
+// SendOwned 发送调用方移交所有权的数据；不支持快速路径的连接会退化为安全复制。
+func SendOwned(c Connection, data []byte) {
+	if owned, ok := c.(interface{ SendOwned([]byte) }); ok {
+		owned.SendOwned(data)
+		return
+	}
+	c.Send(data)
 }
 
 // Close 关闭连接
@@ -92,7 +117,7 @@ func (c *TCPConn) TouchRecv() { c.lastRecv.Store(time.Now().UnixNano()) }
 const tcpWriteBatchMaxFrames = 16
 
 func (c *TCPConn) writeLoop() {
-	var buf bytes.Buffer
+	buf := make([]byte, 0, 65536)
 	for {
 		select {
 		case <-c.done:
@@ -101,24 +126,23 @@ func (c *TCPConn) writeLoop() {
 			if data == nil {
 				continue
 			}
-			buf.Write(data)
+			buf = append(buf[:0], data...)
 			for drained := 1; drained < tcpWriteBatchMaxFrames; drained++ {
 				select {
 				case d2 := <-c.sendCh:
 					if d2 == nil {
 						continue
 					}
-					buf.Write(d2)
+					buf = append(buf, d2...)
 				default:
 					goto flushNow
 				}
 			}
 		flushNow:
-			if _, err := c.conn.Write(buf.Bytes()); err != nil {
+			if _, err := c.conn.Write(buf); err != nil {
 				_ = c.Close()
 				return
 			}
-			buf.Reset()
 		}
 	}
 }
@@ -132,21 +156,17 @@ func (c *TCPConn) readLoop() {
 			return
 		}
 		bodyLen := int(hdr[1])<<16 | int(hdr[2])<<8 | int(hdr[3])
-		frame := make([]byte, 4+bodyLen)
-		copy(frame[:4], hdr)
+		body := make([]byte, bodyLen)
 		if bodyLen > 0 {
-			if _, err := io.ReadFull(c.conn, frame[4:]); err != nil {
+			if _, err := io.ReadFull(c.conn, body); err != nil {
 				_ = c.Close()
 				return
 			}
 		}
 		c.TouchRecv()
-		pkt, err := codec.DecodePacket(frame)
-		if err != nil {
-			continue
-		}
+		pkt := codec.Packet{Type: codec.PacketType(hdr[0]), Body: body}
 		select {
-		case c.recvCh <- &pkt:
+		case c.recvCh <- pkt:
 		case <-c.done:
 			return
 		}
@@ -154,7 +174,7 @@ func (c *TCPConn) readLoop() {
 }
 
 // Recv 返回接收到的 packet 通道
-func (c *TCPConn) Recv() <-chan *codec.Packet { return c.recvCh }
+func (c *TCPConn) Recv() <-chan codec.Packet { return c.recvCh }
 
 var _ Connection = (*TCPConn)(nil)
 

@@ -1,7 +1,5 @@
 package routeragent
 
-import "sort"
-
 // 路由决策类型
 type RoutingMode uint8
 
@@ -36,12 +34,14 @@ func (r *Resolver) PickDirect(list []NodeInfo, nodeID uint32) (NodeInfo, bool) {
 	return NodeInfo{}, false
 }
 
-// PickHash 按 key 选择
+// PickHash 按 key 选择。调用方应传入按 NodeID 排序的列表，以保证多节点路由稳定。
 func (r *Resolver) PickHash(list []NodeInfo, key string) (NodeInfo, bool) {
 	if len(list) == 0 {
 		return NodeInfo{}, false
 	}
-	sort.Slice(list, func(i, j int) bool { return list[i].NodeID < list[j].NodeID })
+	if len(list) == 1 {
+		return list[0], true
+	}
 	idx := int(hashString(key) % uint32(len(list)))
 	return list[idx], true
 }

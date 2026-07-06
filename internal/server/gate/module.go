@@ -147,6 +147,7 @@ func (m *Module) handleConn(c conn.Connection) {
 }
 
 func (m *Module) recvLoop(c conn.Connection) {
+	sess := m.sessions.GetByConnID(c.RemoteAddr())
 	defer func() {
 		m.sessions.OnDisconnect(c)
 		_ = c.Close()
@@ -163,7 +164,7 @@ func (m *Module) recvLoop(c conn.Connection) {
 			}
 			packet := pkt
 			m.App().Post(func() {
-				_ = m.dispatcher.HandlePacket(c, packet)
+				_ = m.dispatcher.HandleSessionPacket(sess, c, packet)
 			})
 		}
 	}
@@ -174,7 +175,7 @@ func (m *Module) handleHandshake(c conn.Connection, _ []byte) bool {
 	if err != nil {
 		return false
 	}
-	c.Send(pkt)
+	conn.SendOwned(c, pkt)
 	return true
 }
 
@@ -196,15 +197,11 @@ func (m *Module) forwardToBackend(sess *session.Session, msg *codec.Message, ent
 			if current == nil || current.ID != sessID || current.Conn == nil {
 				return
 			}
-			rsp, encErr := codec.EncodeMessage(codec.Message{Type: codec.MessageResponse, SeqID: msg.SeqID, CmdID: entry.RspCmdID, ErrCode: code, Body: payload})
+			pkt, encErr := codec.EncodeDataMessagePacket(codec.Message{Type: codec.MessageResponse, SeqID: msg.SeqID, CmdID: entry.RspCmdID, ErrCode: code, Body: payload})
 			if encErr != nil {
 				return
 			}
-			pkt, encErr := codec.EncodePacket(codec.Packet{Type: codec.PacketData, Body: rsp})
-			if encErr != nil {
-				return
-			}
-			current.Conn.Send(pkt)
+			conn.SendOwned(current.Conn, pkt)
 		})
 	case codec.MessageNotify:
 		m.rpcCore.Send(target, entry.Route, msg.Body, ctx)
@@ -280,15 +277,11 @@ func (m *Module) SendToClient(_ corerpc.Ctx, ntf *remotepb.RPC_SendToClient_Ntf)
 	if sess == nil || sess.Conn == nil {
 		return
 	}
-	body, err := codec.EncodeMessage(codec.Message{Type: codec.MessageNotify, CmdID: ntf.GetCmdId(), Body: ntf.GetPayload()})
+	pkt, err := codec.EncodeDataMessagePacket(codec.Message{Type: codec.MessageNotify, CmdID: ntf.GetCmdId(), Body: ntf.GetPayload()})
 	if err != nil {
 		return
 	}
-	pkt, err := codec.EncodePacket(codec.Packet{Type: codec.PacketData, Body: body})
-	if err != nil {
-		return
-	}
-	sess.Conn.Send(pkt)
+	conn.SendOwned(sess.Conn, pkt)
 }
 
 func (m *Module) BindSession(_ corerpc.Ctx, ntf *remotepb.RPC_BindSession_Ntf) {

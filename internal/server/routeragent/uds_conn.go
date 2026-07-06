@@ -1,7 +1,6 @@
 package routeragent
 
 import (
-	"bytes"
 	"encoding/binary"
 	"io"
 	"net"
@@ -114,32 +113,30 @@ func (u *UDSConn) readLoop() {
 const udsWriteBatchMaxFrames = 16
 
 func (u *UDSConn) writeLoop() {
-	var buf bytes.Buffer
+	buf := make([]byte, 0, 65536)
 	for {
 		select {
 		case <-u.done:
 			return
 		case frame := <-u.sendCh:
-			data, err := EncodeFrame(frame)
+			var err error
+			buf, err = AppendFrame(buf[:0], frame)
 			if err != nil {
 				continue
 			}
-			buf.Write(data)
 			for drained := 1; drained < udsWriteBatchMaxFrames; drained++ {
 				select {
 				case f2 := <-u.sendCh:
-					d2, _ := EncodeFrame(f2)
-					buf.Write(d2)
+					buf, _ = AppendFrame(buf, f2)
 				default:
 					goto flushNow
 				}
 			}
 		flushNow:
-			if _, err := u.conn.Write(buf.Bytes()); err != nil {
+			if _, err := u.conn.Write(buf); err != nil {
 				_ = u.Close()
 				return
 			}
-			buf.Reset()
 		}
 	}
 }

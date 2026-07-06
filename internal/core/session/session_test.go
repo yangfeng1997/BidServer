@@ -11,13 +11,13 @@ type stubConn struct {
 	addr string
 }
 
-func (c *stubConn) Send([]byte)                {}
-func (c *stubConn) Close() error               { return nil }
-func (c *stubConn) RemoteAddr() string         { return c.addr }
-func (c *stubConn) Done() <-chan struct{}      { return nil }
-func (c *stubConn) LastRecvUnixNano() int64    { return 0 }
-func (c *stubConn) TouchRecv()                 {}
-func (c *stubConn) Recv() <-chan *codec.Packet { return nil }
+func (c *stubConn) Send([]byte)               {}
+func (c *stubConn) Close() error              { return nil }
+func (c *stubConn) RemoteAddr() string        { return c.addr }
+func (c *stubConn) Done() <-chan struct{}     { return nil }
+func (c *stubConn) LastRecvUnixNano() int64   { return 0 }
+func (c *stubConn) TouchRecv()                {}
+func (c *stubConn) Recv() <-chan codec.Packet { return nil }
 
 var _ conn.Connection = (*stubConn)(nil)
 

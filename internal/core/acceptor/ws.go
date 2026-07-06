@@ -16,6 +16,7 @@ import (
 
 	"project/internal/core/codec"
 	"project/internal/core/conn"
+	"project/pkg/logger"
 )
 
 // WebSocket 接入器
@@ -101,7 +102,7 @@ func (a *WSAcceptor) handleWS(w http.ResponseWriter, r *http.Request) {
 	wrapped := &wsConnection{
 		conn:   wsConn,
 		done:   make(chan struct{}),
-		recvCh: make(chan *codec.Packet, 64),
+		recvCh: make(chan codec.Packet, 256),
 		sendCh: make(chan []byte, 256),
 	}
 	wrapped.TouchRecv()
@@ -123,7 +124,7 @@ type wsConnection struct {
 	done       chan struct{}
 	closeOnce  sync.Once
 	lastRecv   atomic.Int64
-	recvCh     chan *codec.Packet
+	recvCh     chan codec.Packet
 	sendCh     chan []byte
 }
 
@@ -137,6 +138,8 @@ func (c *wsConnection) Send(data []byte) {
 	case <-c.done:
 		return
 	case c.sendCh <- buf:
+	default:
+		logger.Warn("ws conn send queue full, drop packet", logger.String("remote", c.RemoteAddr()), logger.Int("queue_len", len(c.sendCh)), logger.Int("queue_cap", cap(c.sendCh)))
 	}
 }
 
@@ -162,7 +165,7 @@ func (c *wsConnection) LastRecvUnixNano() int64 { return c.lastRecv.Load() }
 
 func (c *wsConnection) TouchRecv() { c.lastRecv.Store(time.Now().UnixNano()) }
 
-func (c *wsConnection) Recv() <-chan *codec.Packet { return c.recvCh }
+func (c *wsConnection) Recv() <-chan codec.Packet { return c.recvCh }
 
 func (c *wsConnection) writeLoop() {
 	ticker := time.NewTicker(30 * time.Second)
@@ -206,7 +209,7 @@ func (c *wsConnection) readLoop() {
 			continue
 		}
 		select {
-		case c.recvCh <- &pkt:
+		case c.recvCh <- pkt:
 		case <-c.done:
 			return
 		}

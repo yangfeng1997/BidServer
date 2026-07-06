@@ -40,6 +40,12 @@ func (m *Metrics) Snapshot() map[string]int64 {
 	}
 }
 
+func (m *Metrics) AddSnapshot(dst map[string]int64) {
+	for key, val := range m.Snapshot() {
+		dst[key] = val
+	}
+}
+
 // 返回指标的人类可读摘要
 func (m *Metrics) String() string {
 	s := m.Snapshot()

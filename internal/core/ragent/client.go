@@ -1,7 +1,6 @@
 package ragent
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -135,32 +134,30 @@ func (c *Client) Send(frame routeragent.Frame) error {
 const clientWriteBatchMaxFrames = 16
 
 func (c *Client) writeLoop(raw net.Conn) {
-	var buf bytes.Buffer
+	buf := make([]byte, 0, 65536)
 	for {
 		select {
 		case <-c.done:
 			return
 		case frame := <-c.sendCh:
-			data, err := routeragent.EncodeFrame(frame)
+			var err error
+			buf, err = routeragent.AppendFrame(buf[:0], frame)
 			if err != nil {
 				continue
 			}
-			buf.Write(data)
 			for drained := 1; drained < clientWriteBatchMaxFrames; drained++ {
 				select {
 				case f2 := <-c.sendCh:
-					d2, _ := routeragent.EncodeFrame(f2)
-					buf.Write(d2)
+					buf, _ = routeragent.AppendFrame(buf, f2)
 				default:
 					goto flushNow
 				}
 			}
 		flushNow:
-			if _, err := raw.Write(buf.Bytes()); err != nil {
+			if _, err := raw.Write(buf); err != nil {
 				_ = c.Close()
 				return
 			}
-			buf.Reset()
 		}
 	}
 }
@@ -225,8 +222,14 @@ func readFrame(r io.Reader) (routeragent.Frame, error) {
 	if _, err := io.ReadFull(r, buf); err != nil {
 		return routeragent.Frame{}, err
 	}
-	data := make([]byte, 4+length)
-	copy(data[:4], hdr)
-	copy(data[4:], buf)
-	return routeragent.DecodeFrame(data)
+	headLen := int(binary.BigEndian.Uint16(buf[1:3]))
+	bodyLen := length - 3 - headLen
+	if bodyLen < 0 {
+		return routeragent.Frame{}, fmt.Errorf("invalid routeragent frame body length %d", bodyLen)
+	}
+	return routeragent.Frame{
+		Type:   routeragent.FrameType(buf[0]),
+		Header: buf[3 : 3+headLen],
+		Body:   buf[3+headLen : 3+headLen+bodyLen],
+	}, nil
 }

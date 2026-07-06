@@ -1,12 +1,12 @@
 package routeragent
 
 import (
-	"bytes"
 	"encoding/binary"
 	"errors"
 	"io"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"project/pkg/logger"
@@ -65,7 +65,7 @@ func (m *Module) handleIncomingPeer(conn net.Conn, listenAddr string) {
 	}
 
 	// 包装为 PeerLink。若双边同时建连，新连接会替换旧连接并主动关闭旧连接，避免残留双连接。
-	pl := &tcpPeerLink{conn: conn, addr: peerListenAddr, sendCh: make(chan Frame, 16384), done: make(chan struct{})}
+	pl := &tcpPeerLink{conn: conn, addr: peerListenAddr, sendCh: make(chan Frame, 16384), prioSendCh: make(chan Frame, 4096), done: make(chan struct{})}
 	old, replaced, pending := m.peerMgr.Attach(peerKey, pl, "incoming")
 	if replaced {
 		logger.Warn("routeragent peer replaced old connection", logger.String("direction", "incoming"), logger.String("peer_key", peerKey), logger.String("listen_addr", listenAddr))
@@ -98,13 +98,17 @@ func (m *Module) handlePeerFrame(f Frame, peerKey string) {
 	case FrameRpcResponse:
 		head, err := DecodeRPCWireHeader(f.Header)
 		if err != nil {
+			logger.Warn("routeragent peer response decode failed", logger.String("peer_key", peerKey), logger.Err(err))
 			return
 		}
 		entry := m.remoteSeq.Pop(head.SeqID)
 		if entry != nil && entry.udsConn != nil {
 			head.SeqID = entry.origSeqID
-			_ = entry.udsConn.Send(Frame{Type: FrameRpcResponse, Header: EncodeRPCWireHeader(head), Body: f.Body})
+			if err := entry.udsConn.Send(Frame{Type: FrameRpcResponse, Header: EncodeRPCWireHeader(head), Body: f.Body}); err != nil {
+				logger.Warn("routeragent peer response send uds failed", logger.String("peer_key", peerKey), logger.Uint64("seq", head.SeqID), logger.Err(err))
+			}
 		} else {
+			logger.Warn("routeragent peer response late or missing seq", logger.String("peer_key", peerKey), logger.Uint64("seq", head.SeqID))
 			m.metrics.LateResponse.Add(1)
 		}
 		m.metrics.ForwardTotal.Add(1)
@@ -112,6 +116,7 @@ func (m *Module) handlePeerFrame(f Frame, peerKey string) {
 		m.metrics.ForwardTotal.Add(1)
 		head, err := DecodeRPCWireHeader(f.Header)
 		if err != nil {
+			logger.Warn("routeragent peer request decode failed", logger.String("peer_key", peerKey), logger.Err(err))
 			return
 		}
 		nodeID := head.DestNodeID
@@ -135,29 +140,62 @@ func (m *Module) deliverToLocal(nodeID uint32, f Frame) {
 	c := m.localConns[nodeID]
 	m.connMu.RUnlock()
 	if c == nil {
+		logger.Warn("routeragent deliver local missing conn", logger.Uint32("node_id", nodeID), logger.Int("frame_type", int(f.Type)))
 		m.metrics.RouteMiss.Add(1)
 		return
 	}
-	_ = c.Send(f)
+	if err := c.Send(f); err != nil {
+		logger.Warn("routeragent deliver local send failed", logger.Uint32("node_id", nodeID), logger.Int("frame_type", int(f.Type)), logger.Err(err))
+	}
 }
 
 // tcpPeerLink 将 net.Conn 适配为 PeerLink
 type tcpPeerLink struct {
-	conn   net.Conn
-	addr   string
-	sendCh chan Frame
-	done   chan struct{}
-	once   sync.Once
+	conn       net.Conn
+	addr       string
+	sendCh     chan Frame
+	prioSendCh chan Frame
+	done       chan struct{}
+	once       sync.Once
+	maxSendLen atomic.Int64
+	maxPrioLen atomic.Int64
 }
 
 func (l *tcpPeerLink) Send(f Frame) error {
+	ch := l.sendCh
+	if isPriorityFrame(f.Type) {
+		ch = l.prioSendCh
+	}
 	select {
 	case <-l.done:
 		return io.EOF
-	case l.sendCh <- f:
+	case ch <- f:
+		l.recordQueueLen()
 		return nil
 	default:
 		return errors.New("peer send queue full")
+	}
+}
+
+func isPriorityFrame(t FrameType) bool {
+	return t == FrameRpcResponse || t == FrameHeartbeat || t == FrameHandshake || t == FrameHandshakeAck
+}
+
+func (l *tcpPeerLink) recordQueueLen() {
+	if l.sendCh != nil {
+		updateMaxInt64(&l.maxSendLen, int64(len(l.sendCh)))
+	}
+	if l.prioSendCh != nil {
+		updateMaxInt64(&l.maxPrioLen, int64(len(l.prioSendCh)))
+	}
+}
+
+func updateMaxInt64(dst *atomic.Int64, v int64) {
+	for {
+		old := dst.Load()
+		if v <= old || dst.CompareAndSwap(old, v) {
+			return
+		}
 	}
 }
 
@@ -175,33 +213,54 @@ func (l *tcpPeerLink) Close() error {
 const tcpWriteBatchMaxFrames = 16
 
 func (l *tcpPeerLink) writeLoop(done <-chan struct{}) {
-	var buf bytes.Buffer
+	buf := make([]byte, 0, 65536)
 	for {
 		select {
 		case <-done:
 			return
 		case <-l.done:
 			return
+		case f := <-l.prioSendCh:
+			buf = l.writeBatch(buf, f)
 		case f := <-l.sendCh:
-			data, _ := EncodeFrame(f)
-			buf.Write(data)
-			for drained := 1; drained < tcpWriteBatchMaxFrames; drained++ {
-				select {
-				case f2 := <-l.sendCh:
-					data2, _ := EncodeFrame(f2)
-					buf.Write(data2)
-				default:
-					goto flushNow
+			select {
+			case pf := <-l.prioSendCh:
+				buf = l.writeBatch(buf, pf)
+				if err := l.Send(f); err != nil {
+					l.Close()
+					return
 				}
+			default:
+				buf = l.writeBatch(buf, f)
 			}
-		flushNow:
-			if _, err := l.conn.Write(buf.Bytes()); err != nil {
-				l.Close()
-				return
-			}
-			buf.Reset()
 		}
 	}
+}
+
+func (l *tcpPeerLink) writeBatch(buf []byte, first Frame) []byte {
+	var err error
+	buf, err = AppendFrame(buf[:0], first)
+	if err != nil {
+		return buf[:0]
+	}
+	for drained := 1; drained < tcpWriteBatchMaxFrames; drained++ {
+		select {
+		case f := <-l.prioSendCh:
+			buf, _ = AppendFrame(buf, f)
+		default:
+			select {
+			case f := <-l.sendCh:
+				buf, _ = AppendFrame(buf, f)
+			default:
+				goto flushNow
+			}
+		}
+	}
+flushNow:
+	if _, err := l.conn.Write(buf); err != nil {
+		l.Close()
+	}
+	return buf[:0]
 }
 
 func (l *tcpPeerLink) readLoop(onFrame func(Frame)) {
@@ -252,10 +311,11 @@ func NewTCPPeerLink(conn interface{}, addr string) PeerLink {
 		return nil
 	}
 	pl := &tcpPeerLink{
-		conn:   &adaptNetConn{c: c},
-		addr:   addr,
-		sendCh: make(chan Frame, 16384),
-		done:   make(chan struct{}),
+		conn:       &adaptNetConn{c: c},
+		addr:       addr,
+		sendCh:     make(chan Frame, 16384),
+		prioSendCh: make(chan Frame, 4096),
+		done:       make(chan struct{}),
 	}
 	go pl.writeLoop(make(chan struct{}))
 	return pl

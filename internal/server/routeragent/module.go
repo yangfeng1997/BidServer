@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -21,6 +22,7 @@ const (
 	defaultSockPath             = "/run/routeragent/ra.sock"
 	incomingPeerSeqRetention    = 10 * time.Second
 	incomingPeerSeqCleanupEvery = time.Second
+	queueStatsLogEvery          = 5 * time.Second
 )
 
 type incomingPeerSeqEntry struct {
@@ -132,6 +134,7 @@ func (m *Module) AfterInit() error {
 	logger.Info("routeragent keepalive start")
 	go m.keepalive.Run(m.stopCh)
 	go m.runIncomingPeerSeqCleanup(m.stopCh)
+	go m.runQueueStatsLog(m.stopCh)
 
 	if m.registry != nil {
 		serverType := uint32(common.ServerType_ST_ROUTERAGENT)
@@ -324,23 +327,15 @@ func (m *Module) pickTargets(head RPCWireHeader) []uint32 {
 		}
 		return []uint32{nodeID}
 	case RoutingModeHash:
-		list := m.memberTable.ListByServerType(head.ServerType)
-		node, ok := m.resolver.PickHash(list, head.RoutingKey)
+		node, ok := m.memberTable.PickHashByServerType(head.ServerType, head.RoutingKey)
 		if !ok {
 			return nil
 		}
 		return []uint32{node.NodeID}
 	case RoutingModeBroadcast:
-		list := m.memberTable.ListByServerType(head.ServerType)
-		nodes := m.resolver.PickBroadcast(list)
-		out := make([]uint32, 0, len(nodes))
-		for _, node := range nodes {
-			out = append(out, node.NodeID)
-		}
-		return out
+		return m.memberTable.ListNodeIDsByServerType(head.ServerType)
 	default:
-		list := m.memberTable.ListByServerType(head.ServerType)
-		node, ok := m.resolver.PickAny(list)
+		node, ok := m.memberTable.PickAnyByServerType(head.ServerType)
 		if !ok {
 			return nil
 		}
@@ -443,6 +438,80 @@ func (m *Module) runIncomingPeerSeqCleanup(stop <-chan struct{}) {
 			m.cleanupIncomingPeerSeq(now)
 		}
 	}
+}
+
+func (m *Module) runQueueStatsLog(stop <-chan struct{}) {
+	ticker := time.NewTicker(queueStatsLogEvery)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-stop:
+			return
+		case <-ticker.C:
+			m.logQueueStats()
+		}
+	}
+}
+
+func (m *Module) MetricsSnapshot() map[string]int64 {
+	out := m.metrics.Snapshot()
+	m.incomingPeerSeqMu.Lock()
+	out["incoming_peer_seq"] = int64(len(m.incomingPeerSeq))
+	m.incomingPeerSeqMu.Unlock()
+	out["remote_seq_pending_current"] = m.remoteSeq.PendingLen()
+	for _, peer := range m.peerMgr.List() {
+		link, ok := peer.Link.(*tcpPeerLink)
+		if !ok || link == nil {
+			continue
+		}
+		key := sanitizeMetricKey(peer.Addr)
+		out["peer_"+key+"_send_len"] = int64(len(link.sendCh))
+		out["peer_"+key+"_send_cap"] = int64(cap(link.sendCh))
+		out["peer_"+key+"_send_max"] = link.maxSendLen.Load()
+		out["peer_"+key+"_prio_len"] = int64(len(link.prioSendCh))
+		out["peer_"+key+"_prio_cap"] = int64(cap(link.prioSendCh))
+		out["peer_"+key+"_prio_max"] = link.maxPrioLen.Load()
+	}
+	return out
+}
+
+func sanitizeMetricKey(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('_')
+		}
+	}
+	if b.Len() == 0 {
+		return "unknown"
+	}
+	return b.String()
+}
+
+func (m *Module) logQueueStats() {
+	for _, peer := range m.peerMgr.List() {
+		link, ok := peer.Link.(*tcpPeerLink)
+		if !ok || link == nil {
+			continue
+		}
+		logger.Info("routeragent peer queue stats",
+			logger.String("peer_key", peer.Addr),
+			logger.String("direction", peer.Direction),
+			logger.Int("send_len", len(link.sendCh)),
+			logger.Int("send_cap", cap(link.sendCh)),
+			logger.Int64("send_max", link.maxSendLen.Load()),
+			logger.Int("prio_len", len(link.prioSendCh)),
+			logger.Int("prio_cap", cap(link.prioSendCh)),
+			logger.Int64("prio_max", link.maxPrioLen.Load()))
+	}
+	m.incomingPeerSeqMu.Lock()
+	incomingSeq := len(m.incomingPeerSeq)
+	m.incomingPeerSeqMu.Unlock()
+	logger.Info("routeragent state stats",
+		logger.Int64("remote_seq_pending", m.remoteSeq.PendingLen()),
+		logger.Int("incoming_peer_seq", incomingSeq))
 }
 
 func (m *Module) registerConn(nodeID uint32, c *UDSConn) {

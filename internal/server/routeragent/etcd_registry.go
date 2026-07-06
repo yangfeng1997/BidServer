@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"project/internal/core/nodeid"
+	"project/pkg/logger"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
@@ -24,13 +25,22 @@ type nodeInfoJSON struct {
 
 // EtcdRegistry 保存注册与发现状态
 type EtcdRegistry struct {
-	cli    *clientv3.Client
-	prefix string
-	lease  clientv3.LeaseID
-	nodeID uint32
-	raAddr string
-	stopCh chan struct{}
-	mu     sync.Mutex
+	cli              *clientv3.Client
+	prefix           string
+	lease            clientv3.LeaseID
+	nodeID           uint32
+	raAddr           string
+	stopCh           chan struct{}
+	mu               sync.Mutex
+	registered       map[uint32]registeredNode
+	keepaliveStarted bool
+}
+
+type registeredNode struct {
+	nodeID     uint32
+	raAddr     string
+	serverType uint32
+	data       string
 }
 
 // NodePrefix 返回当前集群和 world 下的节点发现前缀。
@@ -56,7 +66,7 @@ func NewEtcdRegistry(endpoints []string, prefix string) (*EtcdRegistry, error) {
 	if err != nil {
 		return nil, fmt.Errorf("etcd client: %w", err)
 	}
-	return &EtcdRegistry{cli: cli, prefix: prefix, stopCh: make(chan struct{})}, nil
+	return &EtcdRegistry{cli: cli, prefix: prefix, stopCh: make(chan struct{}), registered: make(map[uint32]registeredNode)}, nil
 }
 
 // Register 注册本节点到 etcd。
@@ -64,6 +74,7 @@ func NewEtcdRegistry(endpoints []string, prefix string) (*EtcdRegistry, error) {
 func (r *EtcdRegistry) Register(nodeID uint32, raAddr string, serverType uint32) error {
 	r.nodeID = nodeID
 	r.raAddr = raAddr
+	logger.Info("routeragent etcd register node", logger.String("key", r.nodeKey(nodeID)), logger.String("node_id", nodeid.String(nodeID)), logger.Uint32("server_type", serverType), logger.String("ra_addr", raAddr))
 	return r.putNodeIfAbsent(nodeID, raAddr, serverType)
 }
 
@@ -82,6 +93,8 @@ func (r *EtcdRegistry) PutNode(nodeID uint32, raAddr string, serverType uint32) 
 	if _, err = r.cli.Put(context.Background(), key, string(data), clientv3.WithLease(lease)); err != nil {
 		return fmt.Errorf("etcd put: %w", err)
 	}
+	r.rememberNode(nodeID, raAddr, serverType, data)
+	logger.Info("routeragent etcd put node done", logger.String("key", key), logger.String("node_id", nodeid.String(nodeID)), logger.Uint32("server_type", serverType), logger.String("ra_addr", raAddr), logger.Int64("lease", int64(lease)))
 	return nil
 }
 
@@ -104,9 +117,22 @@ func (r *EtcdRegistry) putNodeIfAbsent(nodeID uint32, raAddr string, serverType 
 		return fmt.Errorf("etcd txn put-if-absent: %w", err)
 	}
 	if !resp.Succeeded {
+		if len(resp.Responses) > 0 && resp.Responses[0].GetResponseRange() != nil {
+			for _, kv := range resp.Responses[0].GetResponseRange().Kvs {
+				logger.Warn("routeragent etcd register duplicate", logger.String("key", string(kv.Key)), logger.String("value", string(kv.Value)), logger.Int64("lease", kv.Lease), logger.Int64("version", kv.Version))
+			}
+		}
 		return fmt.Errorf("etcd node already exists: key=%s node_id=%s", key, nodeid.String(nodeID))
 	}
+	logger.Info("routeragent etcd register node done", logger.String("key", key), logger.String("node_id", nodeid.String(nodeID)), logger.Uint32("server_type", serverType), logger.String("ra_addr", raAddr), logger.Int64("lease", int64(lease)), logger.Int64("revision", resp.Header.Revision))
+	r.rememberNode(nodeID, raAddr, serverType, data)
 	return nil
+}
+
+func (r *EtcdRegistry) rememberNode(nodeID uint32, raAddr string, serverType uint32, data []byte) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.registered[nodeID] = registeredNode{nodeID: nodeID, raAddr: raAddr, serverType: serverType, data: string(data)}
 }
 
 func marshalNodeInfo(nodeID uint32, raAddr string, serverType uint32) ([]byte, error) {
@@ -116,39 +142,125 @@ func marshalNodeInfo(nodeID uint32, raAddr string, serverType uint32) ([]byte, e
 
 // DeleteNode 删除节点注册
 func (r *EtcdRegistry) DeleteNode(nodeID uint32) error {
+	r.mu.Lock()
+	delete(r.registered, nodeID)
+	r.mu.Unlock()
 	_, err := r.cli.Delete(context.Background(), r.nodeKey(nodeID))
 	return err
 }
 
 func (r *EtcdRegistry) ensureLease() (clientv3.LeaseID, error) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	if r.lease != 0 {
-		return r.lease, nil
+		lease := r.lease
+		r.mu.Unlock()
+		return lease, nil
 	}
 	lease, err := r.cli.Grant(context.Background(), 10)
 	if err != nil {
+		r.mu.Unlock()
 		return 0, fmt.Errorf("etcd grant: %w", err)
 	}
-	ch, err := r.cli.KeepAlive(context.Background(), lease.ID)
+	r.lease = lease.ID
+	startKeepalive := !r.keepaliveStarted
+	if startKeepalive {
+		r.keepaliveStarted = true
+	}
+	r.mu.Unlock()
+
+	logger.Info("routeragent etcd lease grant done", logger.Int64("lease", int64(lease.ID)), logger.Int64("ttl", lease.TTL), logger.String("prefix", r.prefix))
+	if startKeepalive {
+		go r.keepaliveLoop()
+	}
+	return lease.ID, nil
+}
+
+func (r *EtcdRegistry) keepaliveLoop() {
+	ticker := time.NewTicker(3 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			if err := r.keepaliveOnce(); err != nil {
+				logger.Warn("routeragent etcd keepalive failed", logger.String("prefix", r.prefix), logger.Err(err))
+				if err := r.recoverLease(); err != nil {
+					logger.Error("routeragent etcd lease recover failed", logger.String("prefix", r.prefix), logger.Err(err))
+				}
+			}
+		case <-r.stopCh:
+			r.mu.Lock()
+			lease := r.lease
+			r.lease = 0
+			r.mu.Unlock()
+			if lease != 0 {
+				_, _ = r.cli.Revoke(context.Background(), lease)
+			}
+			return
+		}
+	}
+}
+
+func (r *EtcdRegistry) keepaliveOnce() error {
+	r.mu.Lock()
+	lease := r.lease
+	r.mu.Unlock()
+	if lease == 0 {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	resp, err := r.cli.KeepAliveOnce(ctx, lease)
 	if err != nil {
-		return 0, fmt.Errorf("etcd keepalive: %w", err)
+		r.mu.Lock()
+		if r.lease == lease {
+			r.lease = 0
+		}
+		r.mu.Unlock()
+		return fmt.Errorf("etcd keepalive once lease=%d: %w", lease, err)
+	}
+	if resp == nil {
+		r.mu.Lock()
+		if r.lease == lease {
+			r.lease = 0
+		}
+		r.mu.Unlock()
+		return fmt.Errorf("etcd keepalive once lease=%d nil response", lease)
+	}
+	return nil
+}
+
+func (r *EtcdRegistry) recoverLease() error {
+	r.mu.Lock()
+	if r.lease != 0 {
+		r.mu.Unlock()
+		return nil
+	}
+	lease, err := r.cli.Grant(context.Background(), 10)
+	if err != nil {
+		r.mu.Unlock()
+		return fmt.Errorf("etcd grant: %w", err)
 	}
 	r.lease = lease.ID
-	go func() {
-		for {
-			select {
-			case _, ok := <-ch:
-				if !ok {
-					return
-				}
-			case <-r.stopCh:
-				_, _ = r.cli.Revoke(context.Background(), lease.ID)
-				return
+	registered := make([]registeredNode, 0, len(r.registered))
+	for _, reg := range r.registered {
+		registered = append(registered, reg)
+	}
+	r.mu.Unlock()
+
+	logger.Info("routeragent etcd lease recover done", logger.Int64("lease", int64(lease.ID)), logger.Int64("ttl", lease.TTL), logger.String("prefix", r.prefix), logger.Int("nodes", len(registered)))
+	for _, reg := range registered {
+		key := r.nodeKey(reg.nodeID)
+		if _, err := r.cli.Put(context.Background(), key, reg.data, clientv3.WithLease(lease.ID)); err != nil {
+			r.mu.Lock()
+			if r.lease == lease.ID {
+				r.lease = 0
 			}
+			r.mu.Unlock()
+			return fmt.Errorf("etcd recover put key=%s node_id=%s: %w", key, nodeid.String(reg.nodeID), err)
 		}
-	}()
-	return lease.ID, nil
+		logger.Info("routeragent etcd recover put node done", logger.String("key", key), logger.String("node_id", nodeid.String(reg.nodeID)), logger.Uint32("server_type", reg.serverType), logger.String("ra_addr", reg.raAddr), logger.Int64("lease", int64(lease.ID)))
+	}
+	return nil
 }
 
 func (r *EtcdRegistry) nodeKey(nodeID uint32) string {
@@ -182,14 +294,18 @@ func (r *EtcdRegistry) Discover(onAdd func(NodeInfo, uint32), onDel func(uint32)
 	if err != nil {
 		return fmt.Errorf("etcd get: %w", err)
 	}
+	logger.Info("routeragent etcd discover initial get done", logger.String("prefix", r.prefix), logger.Int64("count", resp.Count), logger.Int64("revision", resp.Header.Revision))
 	for _, kv := range resp.Kvs {
 		info, ok := decodeNodeInfo(kv.Value)
 		if !ok {
+			logger.Warn("routeragent etcd discover decode skip", logger.String("key", string(kv.Key)), logger.String("value", string(kv.Value)), logger.Int64("lease", kv.Lease), logger.Int64("version", kv.Version))
 			continue
 		}
+		logger.Info("routeragent etcd discover add initial", logger.String("key", string(kv.Key)), logger.String("node_id", nodeid.String(info.node.NodeID)), logger.Uint32("server_type", info.serverType), logger.String("ra_addr", info.node.RAAddr), logger.Int64("lease", kv.Lease), logger.Int64("version", kv.Version))
 		onAdd(info.node, info.serverType)
 	}
 	go func() {
+		logger.Info("routeragent etcd watch start", logger.String("prefix", r.prefix))
 		watchCh := r.cli.Watch(ctx, r.prefix, clientv3.WithPrefix())
 		for {
 			select {
@@ -197,21 +313,31 @@ func (r *EtcdRegistry) Discover(onAdd func(NodeInfo, uint32), onDel func(uint32)
 				return
 			case wresp, ok := <-watchCh:
 				if !ok {
+					logger.Warn("routeragent etcd watch channel closed", logger.String("prefix", r.prefix))
 					return
 				}
+				if wresp.Err() != nil {
+					logger.Error("routeragent etcd watch error", logger.String("prefix", r.prefix), logger.Err(wresp.Err()))
+					continue
+				}
+				logger.Info("routeragent etcd watch response", logger.String("prefix", r.prefix), logger.Int64("revision", wresp.Header.Revision), logger.Int("events", len(wresp.Events)))
 				for _, ev := range wresp.Events {
 					switch ev.Type {
 					case clientv3.EventTypePut:
 						info, ok := decodeNodeInfo(ev.Kv.Value)
 						if !ok {
+							logger.Warn("routeragent etcd watch decode skip", logger.String("key", string(ev.Kv.Key)), logger.String("value", string(ev.Kv.Value)), logger.Int64("lease", ev.Kv.Lease), logger.Int64("version", ev.Kv.Version))
 							continue
 						}
+						logger.Info("routeragent etcd watch put", logger.String("key", string(ev.Kv.Key)), logger.String("node_id", nodeid.String(info.node.NodeID)), logger.Uint32("server_type", info.serverType), logger.String("ra_addr", info.node.RAAddr), logger.Int64("lease", ev.Kv.Lease), logger.Int64("version", ev.Kv.Version))
 						onAdd(info.node, info.serverType)
 					case clientv3.EventTypeDelete:
 						id, err := nodeid.Parse(path.Base(string(ev.Kv.Key)))
 						if err != nil {
+							logger.Warn("routeragent etcd watch delete parse skip", logger.String("key", string(ev.Kv.Key)), logger.Err(err))
 							continue
 						}
+						logger.Info("routeragent etcd watch delete", logger.String("key", string(ev.Kv.Key)), logger.String("node_id", id.String()))
 						onDel(id.Uint32())
 					}
 				}
