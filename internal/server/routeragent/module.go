@@ -3,10 +3,7 @@ package routeragent
 import (
 	"context"
 	"encoding/binary"
-	"errors"
 	"fmt"
-	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -25,11 +22,6 @@ const (
 	queueStatsLogEvery          = 5 * time.Second
 )
 
-type incomingPeerSeqEntry struct {
-	peerKey string
-	at      time.Time
-}
-
 // routeragent 业务模块
 type Module struct {
 	app.BaseModule
@@ -42,42 +34,44 @@ type Module struct {
 	keepalive   *KeepAlive
 	udsServer   *UDSServer
 	tcpServer   *TCPServer
-	registry    *EtcdRegistry
+	registry    Registry
 	listenAddr  string
 	stopCh      chan struct{}
 
-	connMu     sync.RWMutex
-	localConns map[uint32]*UDSConn
+	localConns  *LocalConnSet
+	remoteSeq   *RemoteSeqMap
+	incomingSeq *IncomingPeerSeqStore
+	peerFwd     *PeerForwarder
+	router      *Router
 
 	mu        sync.Mutex
 	waiters   map[uint64]*BroadcastWaiter
 	waiterSeq atomic.Uint64
-	remoteSeq *RemoteSeqMap
 	metrics   *Metrics
-
-	incomingPeerSeqMu sync.Mutex
-	incomingPeerSeq   map[uint64]incomingPeerSeqEntry // seqID -> peer connection that delivered the request
 }
 
 // NewModule 创建 routeragent 模块
 func NewModule() *Module {
 	m := &Module{
-		ready:           app.NewReady(),
-		sockPath:        defaultSockPath,
-		memberTable:     NewMemberTable(),
-		peerMgr:         NewPeerMgr(),
-		resolver:        NewResolver(),
-		keepalive:       NewKeepAlive(5*time.Second, 10*time.Second),
-		stopCh:          make(chan struct{}),
-		localConns:      make(map[uint32]*UDSConn),
-		waiters:         make(map[uint64]*BroadcastWaiter),
-		metrics:         NewMetrics(),
-		incomingPeerSeq: make(map[uint64]incomingPeerSeqEntry),
+		ready:       app.NewReady(),
+		sockPath:    defaultSockPath,
+		memberTable: NewMemberTable(),
+		peerMgr:     NewPeerMgr(),
+		resolver:    NewResolver(),
+		keepalive:   NewKeepAlive(5*time.Second, 10*time.Second),
+		stopCh:      make(chan struct{}),
+		localConns:  NewLocalConnSet(),
+		incomingSeq: NewIncomingPeerSeqStore(),
+		waiters:     make(map[uint64]*BroadcastWaiter),
+		metrics:     NewMetrics(),
 	}
 	m.remoteSeq = NewRemoteSeqMap(&m.metrics.RemoteSeqPending)
 	if cfg := RouteragentConfig(); cfg != nil {
 		m.ApplyConfig(cfg.SockPath, cfg.ListenAddr, cfg.HeartbeatSec)
 	}
+	m.peerFwd = NewPeerForwarder(m.peerMgr, m.remoteSeq, m.localConns, m.memberTable, m.incomingSeq, m.metrics, m.listenAddr, m.poster)
+	m.router = NewRouter(m.memberTable, m.resolver, m.localConns, m.remoteSeq, m.peerFwd, m.incomingSeq, m.metrics)
+	m.peerFwd.SetOnPeerFrame(m.router.HandlePeerFrame)
 	return m
 }
 
@@ -96,6 +90,9 @@ func (m *Module) Init() error {
 		return fmt.Errorf("routeragent listen_addr is required")
 	}
 	logger.Info("routeragent listen addr ready", logger.String("listen_addr", m.listenAddr))
+	m.peerFwd.poster = m.poster
+	m.peerFwd.SetListenAddr(m.listenAddr)
+	m.peerFwd.SetOnPeerFrame(m.router.HandlePeerFrame)
 	commonCfg := CommonConfig()
 	if commonCfg != nil && m.App().NodeIDUint32() != 0 {
 		prefix := NodePrefix(commonCfg.Cluster.Name, commonCfg.Cluster.Env, commonCfg.Cluster.WorldId)
@@ -165,7 +162,10 @@ func (m *Module) AfterInit() error {
 	}
 	if m.listenAddr != "" {
 		m.peerMgr.SetListenAddr(m.listenAddr)
-		m.tcpServer = NewTCPServer(m.listenAddr, m.listenAddr, m.handleIncomingPeer)
+		if m.peerFwd != nil {
+			m.peerFwd.SetListenAddr(m.listenAddr)
+		}
+		m.tcpServer = NewTCPServer(m.listenAddr, m.listenAddr, m.peerFwd.HandleIncomingPeer)
 		logger.Info("routeragent tcp listen start", logger.String("listen_addr", m.listenAddr))
 		if err := m.tcpServer.Listen(); err != nil {
 			logger.Error("routeragent tcp listen failed", logger.String("listen_addr", m.listenAddr), logger.Err(err))
@@ -256,175 +256,22 @@ func (m *Module) handleFrame(c *UDSConn, frame Frame) {
 	case FrameHeartbeat:
 		_ = c.Send(Frame{Type: FrameHeartbeat, Body: nil})
 	case FrameRpcRequest, FrameRpcNotify, FrameRpcResponse:
-		m.routeFrame(c, frame)
+		m.router.RouteFrame(c, frame)
 	case FrameBroadcastSent:
 		m.handleBroadcastSent(frame.Body)
 	}
 }
 
-func (m *Module) routeFrame(c *UDSConn, frame Frame) {
-	head, err := DecodeRPCWireHeader(frame.Header)
-	if err != nil || len(frame.Header) == 0 {
-		m.routeLegacyFrame(c, frame)
-		return
-	}
-
-	switch frame.Type {
-	case FrameRpcResponse:
-		if head.DestNodeID != 0 {
-			m.sendResponseViaPeer(head.SeqID, head.DestNodeID, frame)
-			return
-		}
-		entry := m.remoteSeq.Pop(head.SeqID)
-		if entry == nil || entry.udsConn == nil {
-			return
-		}
-		head.SeqID = entry.origSeqID
-		encoded := EncodeRPCWireHeader(head)
-		_ = entry.udsConn.Send(Frame{Type: FrameRpcResponse, Header: encoded, Body: frame.Body})
-	case FrameRpcRequest, FrameRpcNotify:
-		m.metrics.ForwardTotal.Add(1)
-		m.forwardRPC(c, frame, head)
-	}
-}
-
-func (m *Module) forwardRPC(c *UDSConn, frame Frame, head RPCWireHeader) {
-	m.metrics.ForwardTotal.Add(1)
-	targets := m.pickTargets(head)
-	origSeqID := head.SeqID
-	if len(targets) == 0 {
-		return
-	}
-	for _, nodeID := range targets {
-		info, ok := m.memberTable.GetByNodeID(nodeID)
-		if !ok {
-			continue
-		}
-		if local := m.localConn(nodeID); local != nil {
-			out := frame
-			head.DestNodeID = nodeID
-			out.Header = EncodeRPCWireHeader(head)
-			_ = local.Send(out)
-			continue
-		}
-		_ = m.sendPeerOrQueue(info.RAAddr, head.ServerType, peerOutbound{
-			source:       c,
-			frame:        frame,
-			head:         head,
-			origSeqID:    origSeqID,
-			targetNodeID: nodeID,
-			prepareRPC:   true,
-		})
-	}
-}
-
-func (m *Module) pickTargets(head RPCWireHeader) []uint32 {
-	switch RoutingMode(head.RoutingMode) {
-	case RoutingModeDirect:
-		nodeID, err := parseNodeIDKey(head.RoutingKey)
-		if err != nil {
-			return nil
-		}
-		return []uint32{nodeID}
-	case RoutingModeHash:
-		node, ok := m.memberTable.PickHashByServerType(head.ServerType, head.RoutingKey)
-		if !ok {
-			return nil
-		}
-		return []uint32{node.NodeID}
-	case RoutingModeBroadcast:
-		return m.memberTable.ListNodeIDsByServerType(head.ServerType)
-	default:
-		node, ok := m.memberTable.PickAnyByServerType(head.ServerType)
-		if !ok {
-			return nil
-		}
-		return []uint32{node.NodeID}
-	}
-}
-
-func (m *Module) routeLegacyFrame(c *UDSConn, frame Frame) {
-	nodeID, payload, err := DecodeRouteBody(frame.Body)
-	if err != nil {
-		return
-	}
-	info, ok := m.memberTable.GetByNodeID(nodeID)
-	if !ok {
-		return
-	}
-	if local := m.localConn(nodeID); local != nil {
-		_ = local.Send(frame)
-		return
-	}
-	_ = m.sendPeerOrQueue(info.RAAddr, 0, peerOutbound{frame: Frame{Type: frame.Type, Body: EncodeRouteBody(nodeID, payload)}})
-}
-
-func (m *Module) sendToNode(nodeID uint32, frame Frame) error {
-	if local := m.localConn(nodeID); local != nil {
-		return local.Send(frame)
-	}
-	info, ok := m.memberTable.GetByNodeID(nodeID)
-	if !ok {
-		return errors.New("node not found")
-	}
-	return m.sendPeerOrQueue(info.RAAddr, 0, peerOutbound{frame: frame})
-}
-
-// sendResponseViaPeer 将应答通过原请求进入的 peer 连接送回，避免创建多余连接。
-func (m *Module) sendResponseViaPeer(seqID uint64, destNodeID uint32, frame Frame) {
-	if local := m.localConn(destNodeID); local != nil {
-		_ = local.Send(frame)
-		return
-	}
-	info, ok := m.memberTable.GetByNodeID(destNodeID)
-	if !ok {
-		return
-	}
-	m.incomingPeerSeqMu.Lock()
-	entry, has := m.incomingPeerSeq[seqID]
-	if has {
-		delete(m.incomingPeerSeq, seqID)
-	}
-	m.incomingPeerSeqMu.Unlock()
-	if has {
-		if snap := m.peerMgr.getLink(entry.peerKey); snap.state == PeerConnected && snap.link != nil {
-			_ = snap.link.Send(frame)
-			return
-		}
-	}
-	_ = m.sendPeerOrQueue(info.RAAddr, 0, peerOutbound{frame: frame})
-}
-
 func (m *Module) trackIncomingPeerSeq(seqID uint64, peerKey string) {
-	if seqID == 0 || peerKey == "" {
-		return
-	}
-	m.incomingPeerSeqMu.Lock()
-	m.incomingPeerSeq[seqID] = incomingPeerSeqEntry{peerKey: peerKey, at: time.Now()}
-	m.incomingPeerSeqMu.Unlock()
+	m.incomingSeq.Track(seqID, peerKey)
 }
 
 func (m *Module) cleanupIncomingPeerSeq(now time.Time) {
-	m.incomingPeerSeqMu.Lock()
-	for seqID, entry := range m.incomingPeerSeq {
-		if now.Sub(entry.at) > incomingPeerSeqRetention {
-			delete(m.incomingPeerSeq, seqID)
-		}
-	}
-	m.incomingPeerSeqMu.Unlock()
+	m.incomingSeq.CleanupExpired(now, incomingPeerSeqRetention)
 }
 
 func (m *Module) cleanupIncomingPeerSeqByPeer(peerKey string) {
-	if peerKey == "" {
-		return
-	}
-	m.incomingPeerSeqMu.Lock()
-	for seqID, entry := range m.incomingPeerSeq {
-		if entry.peerKey == peerKey {
-			delete(m.incomingPeerSeq, seqID)
-		}
-	}
-	m.incomingPeerSeqMu.Unlock()
+	m.incomingSeq.CleanupByPeer(peerKey)
 }
 
 func (m *Module) runIncomingPeerSeqCleanup(stop <-chan struct{}) {
@@ -440,108 +287,13 @@ func (m *Module) runIncomingPeerSeqCleanup(stop <-chan struct{}) {
 	}
 }
 
-func (m *Module) runQueueStatsLog(stop <-chan struct{}) {
-	ticker := time.NewTicker(queueStatsLogEvery)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-stop:
-			return
-		case <-ticker.C:
-			m.logQueueStatsIfActive()
-		}
-	}
-}
-
-func (m *Module) MetricsSnapshot() map[string]int64 {
-	out := m.metrics.Snapshot()
-	m.incomingPeerSeqMu.Lock()
-	out["incoming_peer_seq"] = int64(len(m.incomingPeerSeq))
-	m.incomingPeerSeqMu.Unlock()
-	out["remote_seq_pending_current"] = m.remoteSeq.PendingLen()
-	for _, peer := range m.peerMgr.List() {
-		link, ok := peer.Link.(*tcpPeerLink)
-		if !ok || link == nil {
-			continue
-		}
-		key := sanitizeMetricKey(peer.Addr)
-		out["peer_"+key+"_send_len"] = int64(len(link.sendCh))
-		out["peer_"+key+"_send_cap"] = int64(cap(link.sendCh))
-		out["peer_"+key+"_send_max"] = link.maxSendLen.Load()
-		out["peer_"+key+"_prio_len"] = int64(len(link.prioSendCh))
-		out["peer_"+key+"_prio_cap"] = int64(cap(link.prioSendCh))
-		out["peer_"+key+"_prio_max"] = link.maxPrioLen.Load()
-	}
-	return out
-}
-
-func sanitizeMetricKey(s string) string {
-	var b strings.Builder
-	for _, r := range s {
-		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' {
-			b.WriteRune(r)
-		} else {
-			b.WriteByte('_')
-		}
-	}
-	if b.Len() == 0 {
-		return "unknown"
-	}
-	return b.String()
-}
-
-func (m *Module) logQueueStatsIfActive() {
-	active := false
-	for _, peer := range m.peerMgr.List() {
-		link, ok := peer.Link.(*tcpPeerLink)
-		if !ok || link == nil {
-			continue
-		}
-		sendLen := len(link.sendCh)
-		prioLen := len(link.prioSendCh)
-		if sendLen == 0 && prioLen == 0 {
-			continue
-		}
-		active = true
-		logger.Info("routeragent peer queue stats",
-			logger.String("peer_key", peer.Addr),
-			logger.String("direction", peer.Direction),
-			logger.Int("send_len", sendLen),
-			logger.Int("send_cap", cap(link.sendCh)),
-			logger.Int64("send_max", link.maxSendLen.Load()),
-			logger.Int("prio_len", prioLen),
-			logger.Int("prio_cap", cap(link.prioSendCh)),
-			logger.Int64("prio_max", link.maxPrioLen.Load()))
-	}
-	m.incomingPeerSeqMu.Lock()
-	incomingSeq := len(m.incomingPeerSeq)
-	m.incomingPeerSeqMu.Unlock()
-	remoteSeqPending := m.remoteSeq.PendingLen()
-	if !active && incomingSeq == 0 && remoteSeqPending == 0 {
-		return
-	}
-	logger.Info("routeragent state stats",
-		logger.Int64("remote_seq_pending", remoteSeqPending),
-		logger.Int("incoming_peer_seq", incomingSeq))
-}
-
 func (m *Module) registerConn(nodeID uint32, c *UDSConn) {
-	m.connMu.Lock()
-	m.localConns[nodeID] = c
-	m.connMu.Unlock()
+	m.localConns.Register(nodeID, c)
 }
 
 func (m *Module) removeConn(c *UDSConn) {
 	m.metrics.PeerDisconnectTotal.Add(1)
-	removed := make([]uint32, 0, 1)
-	m.connMu.Lock()
-	for nodeID, conn := range m.localConns {
-		if conn == c {
-			delete(m.localConns, nodeID)
-			removed = append(removed, nodeID)
-		}
-	}
-	m.connMu.Unlock()
+	removed := m.localConns.Remove(c)
 	for _, nodeID := range removed {
 		m.memberTable.Delete(nodeID)
 		if m.registry != nil {
@@ -552,29 +304,8 @@ func (m *Module) removeConn(c *UDSConn) {
 }
 
 func (m *Module) localConn(nodeID uint32) *UDSConn {
-	m.connMu.RLock()
-	defer m.connMu.RUnlock()
-	return m.localConns[nodeID]
+	return m.localConns.Get(nodeID)
 }
-
-func parseNodeIDKey(key string) (uint32, error) {
-	if key == "" {
-		return 0, errors.New("empty node id key")
-	}
-	v, err := strconv.ParseUint(key, 10, 32)
-	if err != nil {
-		return 0, fmt.Errorf("invalid node id %q: %w", key, err)
-	}
-	return uint32(v), nil
-}
-
-func (m *Module) MemberTable() *MemberTable { return m.memberTable }
-
-func (m *Module) PeerMgr() *PeerMgr { return m.peerMgr }
-
-func (m *Module) Resolver() *Resolver { return m.resolver }
-
-func (m *Module) KeepAlive() *KeepAlive { return m.keepalive }
 
 func (m *Module) handleBroadcastSent(body []byte) {
 	waiterID, nodeIDs, err := DecodeBroadcastSent(body)
@@ -607,54 +338,8 @@ func (m *Module) Broadcast(serverType uint32, payload []byte) BroadcastSentRecor
 	nodeIDs := make([]uint32, 0, len(list))
 	for _, info := range list {
 		nodeIDs = append(nodeIDs, info.NodeID)
-		_ = m.sendToNode(info.NodeID, Frame{Type: FrameRpcNotify, Body: EncodeRouteBody(info.NodeID, payload)})
+		_ = m.router.SendToNode(info.NodeID, Frame{Type: FrameRpcNotify, Body: EncodeRouteBody(info.NodeID, payload)})
 	}
 	m.RegisterWaiter(NewBroadcastWaiter(waiterID, nodeIDs))
 	return BroadcastSentRecord{WaiterID: waiterID, NodeIDs: nodeIDs}
-}
-
-// 返回模块状态
-func (m *Module) DebugString() string {
-	return fmt.Sprintf("routeragent(sock=%s)", m.sockPath)
-}
-
-// RegisterConn 注册连接（集成测试用）
-func (m *Module) RegisterConn(nodeID uint32, c *UDSConn) {
-	m.registerConn(nodeID, c)
-}
-
-// RouteFrame 路由帧（集成测试用）
-func (m *Module) RouteFrame(c *UDSConn, frame Frame) {
-	m.routeFrame(c, frame)
-}
-
-// PosterFunc 将 func(func()) 适配为 app.Poster
-type PosterFunc func(func())
-
-func (f PosterFunc) Post(fn func()) { f(fn) }
-
-// NewModuleForTest 创建用于测试的模块
-func NewModuleForTest(p func(func())) *Module {
-	m := NewModule()
-	m.poster = PosterFunc(p)
-	return m
-}
-
-// ListenAddr 公开（集成测试用）
-func (m *Module) ListenAddr() string { return m.listenAddr }
-
-// SetListenAddr 设置监听地址（集成测试用）
-func (m *Module) SetListenAddr(addr string) { m.listenAddr = addr }
-
-// RemoteSeqMap 返回 RemoteSeqMap（集成测试用）
-func (m *Module) RemoteSeqMap() *RemoteSeqMap { return m.remoteSeq }
-
-// DeliverToLocalConn 投递给本地连接（集成测试用）
-func (m *Module) DeliverToLocalConn(nodeID uint32, f Frame) {
-	m.connMu.RLock()
-	c := m.localConns[nodeID]
-	m.connMu.RUnlock()
-	if c != nil {
-		_ = c.Send(f)
-	}
 }

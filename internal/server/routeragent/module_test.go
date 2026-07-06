@@ -34,7 +34,7 @@ func TestRouteFrame(t *testing.T) {
 	link := &UDSConn{remoteAddr: "peer", done: make(chan struct{}), sendCh: make(chan Frame, 1), recvCh: make(chan Frame, 1)}
 	m.PeerMgr().Attach(peerKey("peer", 2), link, "test")
 	head := RPCWireHeader{ServerType: 2, RoutingMode: uint8(RoutingModeDirect), RoutingKey: "16909060", Route: "test"}
-	m.routeFrame(&UDSConn{remoteAddr: "local"}, Frame{Type: FrameRpcRequest, Header: EncodeRPCWireHeader(head), Body: []byte("hi")})
+	m.router.RouteFrame(&UDSConn{remoteAddr: "local"}, Frame{Type: FrameRpcRequest, Header: EncodeRPCWireHeader(head), Body: []byte("hi")})
 	select {
 	case <-link.sendCh:
 	default:
@@ -49,7 +49,7 @@ func TestRouteFrameUsesRegisteredLocalConn(t *testing.T) {
 	m.MemberTable().Upsert(NodeInfo{NodeID: nodeID, RAAddr: "unix://same-ra"}, 2)
 	m.RegisterConn(nodeID, local)
 	head := RPCWireHeader{ServerType: 2, RoutingMode: uint8(RoutingModeDirect), RoutingKey: "16909060", Route: "test"}
-	m.routeFrame(&UDSConn{remoteAddr: "unix://caller"}, Frame{Type: FrameRpcNotify, Header: EncodeRPCWireHeader(head), Body: []byte("hi")})
+	m.router.RouteFrame(&UDSConn{remoteAddr: "unix://caller"}, Frame{Type: FrameRpcNotify, Header: EncodeRPCWireHeader(head), Body: []byte("hi")})
 	select {
 	case got := <-local.sendCh:
 		if string(got.Body) != "hi" {
@@ -73,7 +73,7 @@ func TestPeerRequestStampsSrcDestAndRoutesDirect(t *testing.T) {
 		Route:       "LobbyHandler/Ping",
 	}
 
-	if err := m.sendPeerOutbound(link, peerOutbound{
+	if err := m.peerFwd.sendPeerOutbound(link, peerOutbound{
 		source:       source,
 		frame:        Frame{Type: FrameRpcRequest, Header: EncodeRPCWireHeader(head), Body: []byte("hi")},
 		head:         head,
@@ -122,7 +122,7 @@ func TestHandlePeerFrameRequestRoutesByDestNode(t *testing.T) {
 	m.RegisterConn(targetNodeID, local)
 	head := RPCWireHeader{SeqID: 3, ServerType: 2, RoutingMode: uint8(RoutingModeDirect), SrcNodeID: fromNodeID, DestNodeID: targetNodeID, RoutingKey: "stale-key", Route: "LobbyHandler/Ping"}
 
-	m.handlePeerFrame(Frame{Type: FrameRpcRequest, Header: EncodeRPCWireHeader(head), Body: []byte("hi")}, "peer:2")
+	m.router.HandlePeerFrame(Frame{Type: FrameRpcRequest, Header: EncodeRPCWireHeader(head), Body: []byte("hi")}, "peer:2")
 
 	select {
 	case got := <-local.sendCh:
@@ -146,7 +146,7 @@ func TestRouteMissReturnsErrorForPeerRequest(t *testing.T) {
 	source := &UDSConn{remoteAddr: "unix://gate", done: make(chan struct{}), sendCh: make(chan Frame, 1), recvCh: make(chan Frame, 1)}
 	head := RPCWireHeader{SeqID: 9, ServerType: 2, RoutingMode: uint8(RoutingModeDirect), SrcNodeID: 0x01010101, RoutingKey: "16908802", Route: "LobbyHandler/Ping"}
 
-	m.handlePeerFrame(Frame{Type: FrameRpcRequest, Header: EncodeRPCWireHeader(head), Body: []byte("hi")}, "peer:2")
+	m.router.HandlePeerFrame(Frame{Type: FrameRpcRequest, Header: EncodeRPCWireHeader(head), Body: []byte("hi")}, "peer:2")
 
 	select {
 	case <-source.sendCh:
@@ -164,7 +164,7 @@ func TestPeerResponseMapsRemoteSeqBackToCaller(t *testing.T) {
 	remoteSeq := m.RemoteSeqMap().Alloc(source, 11)
 	head := RPCWireHeader{SeqID: remoteSeq, SrcNodeID: 0x01020202, DestNodeID: 0x01010101, ErrCode: uint32(errcode.OK), Route: "LobbyHandler/Ping"}
 
-	m.handlePeerFrame(Frame{Type: FrameRpcResponse, Header: EncodeRPCWireHeader(head), Body: []byte("tong")}, "peer:2")
+	m.router.HandlePeerFrame(Frame{Type: FrameRpcResponse, Header: EncodeRPCWireHeader(head), Body: []byte("tong")}, "peer:2")
 
 	select {
 	case got := <-source.sendCh:
@@ -185,20 +185,21 @@ func TestPeerResponseMapsRemoteSeqBackToCaller(t *testing.T) {
 
 func TestIncomingPeerSeqCleanup(t *testing.T) {
 	m := NewModule()
-	m.incomingPeerSeq[1] = incomingPeerSeqEntry{peerKey: "peer:2", at: time.Now().Add(-incomingPeerSeqRetention - time.Second)}
-	m.incomingPeerSeq[2] = incomingPeerSeqEntry{peerKey: "peer:2", at: time.Now()}
+	m.incomingSeq.Track(1, "peer:2")
+	m.incomingSeq.entries[1] = incomingPeerSeqEntry{peerKey: "peer:2", at: time.Now().Add(-incomingPeerSeqRetention - time.Second)}
+	m.incomingSeq.Track(2, "peer:2")
 
 	m.cleanupIncomingPeerSeq(time.Now())
 
-	if _, ok := m.incomingPeerSeq[1]; ok {
+	if _, ok := m.incomingSeq.Pop(1); ok {
 		t.Fatal("expired incoming peer seq should be cleaned")
 	}
-	if _, ok := m.incomingPeerSeq[2]; !ok {
+	if _, ok := m.incomingSeq.Pop(2); !ok {
 		t.Fatal("fresh incoming peer seq should be kept")
 	}
 	m.cleanupIncomingPeerSeqByPeer("peer:2")
-	if len(m.incomingPeerSeq) != 0 {
-		t.Fatalf("peer cleanup left %d entries", len(m.incomingPeerSeq))
+	if m.incomingSeq.Len() != 0 {
+		t.Fatalf("peer cleanup left %d entries", m.incomingSeq.Len())
 	}
 }
 
@@ -222,7 +223,7 @@ func TestFailOutboundSendsOriginalSeqError(t *testing.T) {
 	head := RPCWireHeader{SeqID: 11, SrcNodeID: 0x01010101, Route: "LobbyHandler/Ping"}
 	m := NewModule()
 
-	m.failOutbound(peerOutbound{source: source, frame: Frame{Type: FrameRpcRequest}, head: head, origSeqID: head.SeqID}, errcode.ERR_INTERNAL)
+	m.peerFwd.FailOutbound(peerOutbound{source: source, frame: Frame{Type: FrameRpcRequest}, head: head, origSeqID: head.SeqID}, errcode.ERR_INTERNAL)
 
 	select {
 	case got := <-source.sendCh:
