@@ -1,0 +1,24 @@
+progress sent=498912 ok=498412 failed=0 qps=99671.77 elapsed=5.001s
+progress sent=1026431 ok=1025931 failed=0 qps=102585.18 elapsed=10.001s
+progress sent=1535315 ok=1534815 failed=0 qps=102319.17 elapsed=15s
+{
+  "addr": "127.0.0.1:7004",
+  "clients": 500,
+  "requests_per_client": 4000,
+  "sent": 2000000,
+  "ok": 2000000,
+  "failed": 0,
+  "reconnects": 0,
+  "elapsed_ms": 19658,
+  "qps": 101734.94681430813,
+  "failures": {},
+  "latency": {
+    "count": 2000000,
+    "min_ns": 200298,
+    "avg_ns": 4840273,
+    "p50_ns": 4537408,
+    "p90_ns": 7392644,
+    "p99_ns": 10963247,
+    "max_ns": 55842516
+  }
+}

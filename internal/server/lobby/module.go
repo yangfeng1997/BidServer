@@ -8,9 +8,9 @@ import (
 
 	"project/internal/core/app"
 	"project/internal/core/errcode"
-	"project/internal/core/ragent"
+	"project/internal/core/ragent/sdk"
+	ragentwire "project/internal/core/ragent/wire"
 	corerpc "project/internal/core/rpc"
-	"project/internal/server/routeragent"
 	genhandler "project/protocol/gen/handler"
 )
 
@@ -19,8 +19,8 @@ const moduleName = "lobby"
 type routeragentClient interface {
 	Connect() error
 	Close() error
-	Send(routeragent.Frame) error
-	SendRPCFrame(routeragent.FrameType, routeragent.RPCWireHeader, []byte) error
+	Send(ragentwire.Frame) error
+	SendRPCFrame(ragentwire.FrameType, ragentwire.RPCWireHeader, []byte) error
 }
 
 type Module struct {
@@ -56,7 +56,7 @@ func (m *Module) Init() error {
 	m.handler = NewHandler()
 	m.rpcDispatcher = corerpc.NewDispatcher()
 	genhandler.RegisterLobbyHandler(m.rpcDispatcher, m.handler)
-	m.client = ragent.NewClient(m.App().NodeIDUint32(), cfg.RouteragentSockPath, poster, m.handleRagentFrame)
+	m.client = sdk.NewClient(m.App().NodeIDUint32(), cfg.RouteragentSockPath, poster, m.handleRagentFrame)
 	return nil
 }
 
@@ -81,37 +81,37 @@ func (m *Module) BeforeShutdown() {
 
 func (m *Module) Shutdown() {}
 
-func (m *Module) handleRagentFrame(frame routeragent.Frame) {
+func (m *Module) handleRagentFrame(frame ragentwire.Frame) {
 	switch frame.Type {
-	case routeragent.FrameRpcRequest, routeragent.FrameRpcNotify:
+	case ragentwire.FrameRpcRequest, ragentwire.FrameRpcNotify:
 		m.handleInbound(frame)
 	}
 }
 
-func (m *Module) handleInbound(frame routeragent.Frame) {
-	head, err := routeragent.DecodeRPCWireHeader(frame.Header)
+func (m *Module) handleInbound(frame ragentwire.Frame) {
+	head, err := ragentwire.DecodeRPCWireHeader(frame.Header)
 	if err != nil {
 		return
 	}
 	var code errcode.ErrCode = errcode.OK
 	if err := m.dispatchRoute(head, frame.Body, func(payload []byte, err error) {
-		if frame.Type != routeragent.FrameRpcRequest || head.SeqID == 0 {
+		if frame.Type != ragentwire.FrameRpcRequest || head.SeqID == 0 {
 			return
 		}
 		rspHead := responseHead(head, m.nodeID())
 		rspHead.ErrCode = uint32(errcode.CodeOf(err))
-		_ = m.client.SendRPCFrame(routeragent.FrameRpcResponse, rspHead, payload)
+		_ = m.client.SendRPCFrame(ragentwire.FrameRpcResponse, rspHead, payload)
 	}); err != nil {
 		code = errcode.CodeOf(err)
 	}
-	if frame.Type == routeragent.FrameRpcRequest && head.SeqID != 0 && code != errcode.OK {
+	if frame.Type == ragentwire.FrameRpcRequest && head.SeqID != 0 && code != errcode.OK {
 		rspHead := responseHead(head, m.nodeID())
 		rspHead.ErrCode = uint32(code)
-		_ = m.client.SendRPCFrame(routeragent.FrameRpcResponse, rspHead, nil)
+		_ = m.client.SendRPCFrame(ragentwire.FrameRpcResponse, rspHead, nil)
 	}
 }
 
-func (m *Module) dispatchRoute(head routeragent.RPCWireHeader, body []byte, reply func([]byte, error)) error {
+func (m *Module) dispatchRoute(head ragentwire.RPCWireHeader, body []byte, reply func([]byte, error)) error {
 	return m.rpcDispatcher.Dispatch(head.Route, inboundCtx(head), body, reply)
 }
 
@@ -122,7 +122,7 @@ func (m *Module) nodeID() uint32 {
 	return m.App().NodeIDUint32()
 }
 
-func responseHead(req routeragent.RPCWireHeader, localNodeID uint32) routeragent.RPCWireHeader {
+func responseHead(req ragentwire.RPCWireHeader, localNodeID uint32) ragentwire.RPCWireHeader {
 	rsp := req
 	if rsp.DestNodeID != 0 {
 		rsp.SrcNodeID = rsp.DestNodeID
@@ -133,7 +133,7 @@ func responseHead(req routeragent.RPCWireHeader, localNodeID uint32) routeragent
 	return rsp
 }
 
-func inboundCtx(head routeragent.RPCWireHeader) corerpc.Ctx {
+func inboundCtx(head ragentwire.RPCWireHeader) corerpc.Ctx {
 	ctx := corerpc.Background().WithFromNode(head.SrcNodeID)
 	if head.DeadlineMs > 0 {
 		ctx = ctx.WithDeadline(time.Duration(head.DeadlineMs) * time.Millisecond)
@@ -148,7 +148,7 @@ func NewModuleForTest() *Module {
 	return &Module{ready: app.NewReady(), handler: handler, rpcDispatcher: dispatcher}
 }
 
-func (m *Module) HandleRagentFrame(frame routeragent.Frame) {
+func (m *Module) HandleRagentFrame(frame ragentwire.Frame) {
 	m.handleRagentFrame(frame)
 }
 

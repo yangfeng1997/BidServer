@@ -24,6 +24,7 @@
 - [`nodeid/`](nodeid/)
 - [`options/`](options/)
 - [`process/`](process/)
+- [`ragent/`](ragent/) — RouterAgent wire 协议、客户端 SDK、服务端核心实现
 - [`rpc/`](rpc/)
 - [`session/`](session/)
 
@@ -33,6 +34,7 @@
 - 查网络接入先看 `acceptor/`、`conn/`、`codec/`。
 - 查消息分发先看 `dispatcher/`、`session/`。
 - 查 RPC 先看 `rpc/`。
+- 查 RouterAgent 协议 / SDK / agent 核心先看 `ragent/`。
 - 查配置加载和热更先看 `config/`。
 - 查日志先看 `logger/`。
 - 查节点 ID 编解码先看 `nodeid/`。

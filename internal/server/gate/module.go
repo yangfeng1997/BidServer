@@ -12,10 +12,10 @@ import (
 	"project/internal/core/conn"
 	"project/internal/core/dispatcher"
 	"project/internal/core/errcode"
-	"project/internal/core/ragent"
+	"project/internal/core/ragent/sdk"
+	ragentwire "project/internal/core/ragent/wire"
 	corerpc "project/internal/core/rpc"
 	"project/internal/core/session"
-	"project/internal/server/routeragent"
 	"project/protocol/common"
 	genrpc "project/protocol/gen"
 	genremote "project/protocol/gen/remote"
@@ -31,7 +31,7 @@ type Module struct {
 	dispatcher       *dispatcher.GateDispatcher
 	remoteDispatcher *corerpc.Dispatcher
 	rpcCore          *corerpc.Core
-	client           *ragent.Client
+	client           *sdk.Client
 	cfg              *GateConfigEntry
 	stopCh           chan struct{}
 	stopOnce         sync.Once
@@ -69,7 +69,7 @@ func (m *Module) Init() error {
 		m.dispatcher.RegisterRoute(cmdID, dispatcher.RouteEntry{CmdID: cmdID, ServerType: entry.ServerType, Route: entry.Route, RspCmdID: entry.RspCmdID})
 	}
 
-	m.client = ragent.NewClient(m.App().NodeIDUint32(), cfg.RouteragentSockPath, poster, m.handleRagentFrame)
+	m.client = sdk.NewClient(m.App().NodeIDUint32(), cfg.RouteragentSockPath, poster, m.handleRagentFrame)
 	m.rpcCore = corerpc.New(m.client, corerpc.WithPoster(poster))
 	m.client.SetCore(m.rpcCore)
 	genrpc.Init(m.rpcCore)
@@ -213,21 +213,21 @@ func (m *Module) forwardToBackend(sess *session.Session, msg *codec.Message, ent
 	return nil
 }
 
-func (m *Module) handleRagentFrame(frame routeragent.Frame) {
+func (m *Module) handleRagentFrame(frame ragentwire.Frame) {
 	switch frame.Type {
-	case routeragent.FrameRpcRequest, routeragent.FrameRpcNotify:
+	case ragentwire.FrameRpcRequest, ragentwire.FrameRpcNotify:
 		m.handleRemote(frame)
 	}
 }
 
-func (m *Module) handleRemote(frame routeragent.Frame) {
-	head, err := routeragent.DecodeRPCWireHeader(frame.Header)
+func (m *Module) handleRemote(frame ragentwire.Frame) {
+	head, err := ragentwire.DecodeRPCWireHeader(frame.Header)
 	if err != nil {
 		return
 	}
 	ctx := corerpc.Background().WithFromNode(head.SrcNodeID).WithDeadline(time.Duration(head.DeadlineMs) * time.Millisecond)
 	code := errcode.CodeOf(m.remoteDispatcher.Dispatch(head.Route, ctx, frame.Body, nil))
-	if frame.Type == routeragent.FrameRpcRequest && head.SeqID != 0 {
+	if frame.Type == ragentwire.FrameRpcRequest && head.SeqID != 0 {
 		rspHead := head
 		if rspHead.DestNodeID != 0 {
 			rspHead.SrcNodeID = rspHead.DestNodeID
@@ -236,7 +236,7 @@ func (m *Module) handleRemote(frame routeragent.Frame) {
 		}
 		rspHead.DestNodeID = head.SrcNodeID
 		rspHead.ErrCode = uint32(code)
-		_ = m.client.SendRPCFrame(routeragent.FrameRpcResponse, rspHead, nil)
+		_ = m.client.SendRPCFrame(ragentwire.FrameRpcResponse, rspHead, nil)
 	}
 }
 

@@ -11,23 +11,24 @@ import (
 	"project/internal/core/dispatcher"
 	"project/internal/core/errcode"
 	"project/internal/core/nodeid"
+	ragentagent "project/internal/core/ragent/agent"
+	ragentwire "project/internal/core/ragent/wire"
 	corerpc "project/internal/core/rpc"
 	"project/internal/core/session"
 	"project/internal/server/lobby"
-	"project/internal/server/routeragent"
 	handlerpb "project/protocol/handler"
 )
 
 type frameTransport struct {
-	ra   *routeragent.Module
-	from *routeragent.UDSConn
+	ra   *ragentagent.Runtime
+	from *ragentagent.UDSConn
 }
 
 func (t frameTransport) SendFrame(target corerpc.Target, header corerpc.Header, body []byte) error {
-	wire := routeragent.RPCWireHeader{
+	wire := ragentwire.RPCWireHeader{
 		SeqID:       header.SeqID,
 		ServerType:  header.ServerType,
-		RoutingMode: uint8(routeragent.RoutingModeHash),
+		RoutingMode: uint8(ragentwire.RoutingModeHash),
 		DeadlineMs:  header.DeadlineMs,
 		SrcNodeID:   header.SrcNodeID,
 		DestNodeID:  header.DestNodeID,
@@ -35,14 +36,14 @@ func (t frameTransport) SendFrame(target corerpc.Target, header corerpc.Header, 
 		Route:       header.Route,
 	}
 	if target.Mode == corerpc.RoutingDirect {
-		wire.RoutingMode = uint8(routeragent.RoutingModeDirect)
+		wire.RoutingMode = uint8(ragentwire.RoutingModeDirect)
 		wire.RoutingKey = ""
 		if target.NodeID != 0 {
 			wire.DestNodeID = target.NodeID
 			wire.RoutingKey = u32toa(target.NodeID)
 		}
 	}
-	t.ra.RouteFrame(t.from, routeragent.Frame{Type: routeragent.FrameRpcRequest, Header: routeragent.EncodeRPCWireHeader(wire), Body: body})
+	t.ra.RouteFrame(t.from, ragentwire.Frame{Type: ragentwire.FrameRpcRequest, Header: ragentwire.EncodeRPCWireHeader(wire), Body: body})
 	return nil
 }
 
@@ -50,12 +51,12 @@ func TestPingTongClientGateLobbyRoundTrip(t *testing.T) {
 	gateNodeID := nodeid.Encode(1, 1, 0).Uint32()
 	lobbyNodeID := nodeid.Encode(1, 2, 0).Uint32()
 
-	ra := routeragent.NewModule()
+	ra := ragentagent.NewRuntime()
 	ra.SetListenAddr("127.0.0.1:7100")
-	gateConn := routeragent.NewTestUDSConn("gate")
-	lobbyConn := routeragent.NewTestUDSConn("lobby")
-	ra.MemberTable().Upsert(routeragent.NodeInfo{NodeID: gateNodeID, RAAddr: "local"}, 1)
-	ra.MemberTable().Upsert(routeragent.NodeInfo{NodeID: lobbyNodeID, RAAddr: "local"}, 2)
+	gateConn := ragentagent.NewTestUDSConn("gate")
+	lobbyConn := ragentagent.NewTestUDSConn("lobby")
+	ra.MemberTable().Upsert(ragentagent.NodeInfo{NodeID: gateNodeID, RAAddr: "local"}, 1)
+	ra.MemberTable().Upsert(ragentagent.NodeInfo{NodeID: lobbyNodeID, RAAddr: "local"}, 2)
 	ra.RegisterConn(gateNodeID, gateConn)
 	ra.RegisterConn(lobbyNodeID, lobbyConn)
 
@@ -85,7 +86,7 @@ func TestPingTongClientGateLobbyRoundTrip(t *testing.T) {
 	}
 	select {
 	case frame := <-gateConn.Recv():
-		head, err := routeragent.DecodeRPCWireHeader(frame.Header)
+		head, err := ragentwire.DecodeRPCWireHeader(frame.Header)
 		if err != nil {
 			t.Fatalf("decode response head: %v", err)
 		}
@@ -121,21 +122,21 @@ func routerEntry(cmdID uint32) dispatcher.RouteEntry {
 }
 
 type lobbyFrameSender struct {
-	ra   *routeragent.Module
-	from *routeragent.UDSConn
+	ra   *ragentagent.Runtime
+	from *ragentagent.UDSConn
 }
 
 func (s lobbyFrameSender) Connect() error { return nil }
 
 func (s lobbyFrameSender) Close() error { return nil }
 
-func (s lobbyFrameSender) Send(frame routeragent.Frame) error {
+func (s lobbyFrameSender) Send(frame ragentwire.Frame) error {
 	s.ra.RouteFrame(s.from, frame)
 	return nil
 }
 
-func (s lobbyFrameSender) SendRPCFrame(frameType routeragent.FrameType, head routeragent.RPCWireHeader, body []byte) error {
-	return s.Send(routeragent.Frame{Type: frameType, Header: routeragent.EncodeRPCWireHeader(head), Body: body})
+func (s lobbyFrameSender) SendRPCFrame(frameType ragentwire.FrameType, head ragentwire.RPCWireHeader, body []byte) error {
+	return s.Send(ragentwire.Frame{Type: frameType, Header: ragentwire.EncodeRPCWireHeader(head), Body: body})
 }
 
 func u32toa(v uint32) string {

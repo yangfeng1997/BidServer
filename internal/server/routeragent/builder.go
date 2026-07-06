@@ -5,8 +5,11 @@ import (
 
 	configgen "project/config/gen"
 	"project/internal/core/app"
-	"project/internal/core/logger"
+	corelogger "project/internal/core/logger"
 	opt "project/internal/core/options"
+	ragentagent "project/internal/core/ragent/agent"
+	"project/internal/core/ragent/agent/discovery/etcd"
+	logpkg "project/pkg/logger"
 )
 
 type Builder struct {
@@ -23,11 +26,25 @@ func NewRouteragentBuilder(opts Options) *Builder {
 	// 2. 创建LoggerGroup，依赖Option和配置
 	loggerGroup := newLoggerGroup(opts.BaseOptions, routeragentConfig.Get().LoggerGroup)
 
+	runtime := ragentagent.NewRuntime()
+	cfg := routeragentConfig.Get()
+	runtime.ApplyConfig(cfg.SockPath, cfg.ListenAddr, cfg.HeartbeatSec)
+	if commonConfig.Get() != nil {
+		commonCfg := commonConfig.Get()
+		prefix := etcd.NodePrefix(commonCfg.Cluster.Name, commonCfg.Cluster.Env, commonCfg.Cluster.WorldId)
+		registry, err := etcd.NewEtcdRegistry(commonCfg.Etcd.Endpoints, prefix)
+		if err != nil {
+			panic(fmt.Errorf("init routeragent etcd registry: %w", err))
+		}
+		runtime.SetRegistry(registry)
+		logpkg.Info("routeragent etcd registry configured", logpkg.String("prefix", prefix))
+	}
+
 	baseBuilder := app.NewBaseBuilder(nil)
 	baseBuilder.SetDaemon(opts.Daemon)
 	baseBuilder.SetPprof(opts.Pprof, opts.PprofAddr)
 	baseBuilder.SetNodeID(opts.NodeID)
-	baseBuilder.AddModule(NewModule())
+	baseBuilder.AddModule(NewModule(runtime))
 	baseBuilder.AddShutdownHook(loggerGroup.Shutdown)
 	baseBuilder.AddReloadHook(ReloadConfig)
 
@@ -50,8 +67,8 @@ func mustLoadRouteragentConfig(path string) *RouteragentConfigEntry {
 	return entry
 }
 
-func newLoggerGroup(opts opt.BaseOptions, cfg configgen.LoggerGroupConfig) *logger.LoggerGroup {
-	group, err := logger.NewLoggerGroup(opts, cfg)
+func newLoggerGroup(opts opt.BaseOptions, cfg configgen.LoggerGroupConfig) *corelogger.LoggerGroup {
+	group, err := corelogger.NewLoggerGroup(opts, cfg)
 	if err != nil {
 		panic(fmt.Errorf("init routeragent logger: %w", err))
 	}
