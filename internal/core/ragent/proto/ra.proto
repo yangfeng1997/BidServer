@@ -1,8 +1,8 @@
 syntax = "proto3";
 
-package protocol.ra;
+package internal.core.ragent.proto;
 
-option go_package = "project/protocol/ra;ra";
+option go_package = "project/internal/core/ragent/proto;ragentpb";
 
 message Handshake {
   uint32 node_id = 1;

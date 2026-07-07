@@ -9,7 +9,8 @@
 ## 目录定位
 
 - 协议 proto 源文件与生成代码。
-- `common/` 放协议注解、错误码和节点类型；`handler/` 放前端 handler 服务；`remote/` 放后端 RPC remote 服务；`ra/` 放 RouterAgent 协议；`gen/` 放生成的路由、handler、remote 和 RPC stub。
+- `common/` 放协议注解、错误码和节点类型；`handler/` 放前端 handler 服务；`remote/` 放后端 RPC remote 服务；`gen/` 放生成的路由、handler、remote 和 RPC stub。
+- RouterAgent 内部 protobuf 协议放在 `internal/core/ragent/proto/`。
 - 当前客户端入口只保留 `LobbyHandler/Ping` -> `SC_Pong_Rsp`。
 - 当前 RPC 只保留 `protocol/remote/lobby_remote.proto` 下的 `RPC_Test_Req`、`RPC_Test_Rsp`、`RPC_Test_Ntf` 样例。
 
@@ -18,7 +19,6 @@
 - [`common/`](common/)
 - [`cs/`](cs/)
 - [`handler/`](handler/)
-- [`ra/`](ra/)
 - [`remote/`](remote/)
 - [`ss/`](ss/)
 - [`gen/`](gen/)
