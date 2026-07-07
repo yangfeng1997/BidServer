@@ -69,6 +69,7 @@ func (m *Module) Init() error {
 	m.client = sdk.NewClient(m.App().NodeIDUint32(), cfg.RouteragentSockPath, poster, m.handleRagentFrame)
 	m.rpcCore = corerpc.New(m.client, corerpc.WithPoster(poster))
 	m.client.SetCore(m.rpcCore)
+	genrpc.Init(m.rpcCore)
 	corerpc.Init(m.rpcCore)
 	m.dispatcher.SetForward(m.forwardToBackend)
 	m.dispatcher.SetHandshakeHandler(m.handleHandshake)

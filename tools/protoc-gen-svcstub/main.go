@@ -30,7 +30,7 @@ type serviceSpec struct {
 type methodSpec struct {
 	Name       string
 	Notify     bool
-	InputType  string // 简名，如 CS_ClaimReward_Req
+	InputType  string // 简名，如 CS_Ping_Req
 	InputPkg   string // import path
 	OutputType string // Rsp 类型简名，Notify 时为 ""
 	OutputPkg  string

@@ -14,7 +14,7 @@
 2. 二次检查残留 benchmark 服务并停止。
 3. 等待 `15s`，让 etcd lease TTL 过期。
 4. 启动本轮 RA / lobby / gate。
-5. 校验 pprof cmdline，并对每个 gate 执行 1 次 smoke ping/tong。
+5. 校验 pprof cmdline，并对每个 gate 执行 1 次 smoke ping/pong。
 
 未使用 `stopall.sh` / `startall.sh`，未运行配置 bake / dry-run。
 

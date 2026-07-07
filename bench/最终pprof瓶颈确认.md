@@ -140,7 +140,7 @@ proto consumeStringValidateUTF8      331MB
 ragent.releaseFrameBuffer            220MB
 ```
 
-判断：lobby 的剩余大头是业务对象/protobuf 编解码和 ragent read 生命周期。Ping/Tong 业务过轻，proto 成本在 profile 中自然显眼。
+判断：lobby 的剩余大头是业务对象/protobuf 编解码和 ragent read 生命周期。Ping/Pong 业务过轻，proto 成本在 profile 中自然显眼。
 
 ### routeragent alloc_space
 

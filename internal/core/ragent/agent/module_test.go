@@ -164,7 +164,7 @@ func TestPeerResponseMapsRemoteSeqBackToCaller(t *testing.T) {
 	remoteSeq := m.RemoteSeqMap().Alloc(source, 11)
 	head := RPCWireHeader{SeqID: remoteSeq, SrcNodeID: 0x01020202, DestNodeID: 0x01010101, ErrCode: uint32(errcode.OK), Route: "LobbyHandler/Ping"}
 
-	m.router.HandlePeerFrame(Frame{Type: FrameRpcResponse, Header: EncodeRPCWireHeader(head), Body: []byte("tong")}, "peer:2")
+	m.router.HandlePeerFrame(Frame{Type: FrameRpcResponse, Header: EncodeRPCWireHeader(head), Body: []byte("pong")}, "peer:2")
 
 	select {
 	case got := <-source.sendCh:
@@ -175,8 +175,8 @@ func TestPeerResponseMapsRemoteSeqBackToCaller(t *testing.T) {
 		if gotHead.SeqID != 11 || gotHead.SrcNodeID != 0x01020202 || gotHead.DestNodeID != 0x01010101 || errcode.ErrCode(gotHead.ErrCode) != errcode.OK {
 			t.Fatalf("unexpected response head: %+v", gotHead)
 		}
-		if string(got.Body) != "tong" {
-			t.Fatalf("body=%q, want tong", string(got.Body))
+		if string(got.Body) != "pong" {
+			t.Fatalf("body=%q, want pong", string(got.Body))
 		}
 	default:
 		t.Fatal("expected peer response to be sent to original UDS conn")

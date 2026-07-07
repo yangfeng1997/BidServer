@@ -13,27 +13,27 @@ func TestLintMethodName(t *testing.T) {
 		expectError bool
 	}{
 		{
-			name: "valid Notify", methodName: "SyncPos", inputName: "CS_SyncPos_Ntf", outputName: "",
-			notify: true, kind: kindFrontend, expectError: false,
+			name: "valid Notify", methodName: "TestNtf", inputName: "RPC_Test_Ntf", outputName: "",
+			notify: true, kind: kindBackend, expectError: false,
 		},
 		{
-			name: "valid Req/Rsp (FRONTEND)", methodName: "ClaimReward", inputName: "CS_ClaimReward_Req", outputName: "SC_ClaimReward_Rsp",
+			name: "valid Req/Rsp (FRONTEND)", methodName: "Ping", inputName: "CS_Ping_Req", outputName: "SC_Pong_Rsp",
 			notify: false, kind: kindFrontend, expectError: false,
 		},
 		{
-			name: "valid Req/Rsp (BACKEND)", methodName: "Login", inputName: "RPC_Login_Req", outputName: "RPC_Login_Rsp",
+			name: "valid Req/Rsp (BACKEND)", methodName: "Test", inputName: "RPC_Test_Req", outputName: "RPC_Test_Rsp",
 			notify: false, kind: kindBackend, expectError: false,
 		},
 		{
-			name: "Notify missing _Ntf suffix", methodName: "SyncPos", inputName: "CS_SyncPos_Req", outputName: "",
-			notify: true, kind: kindFrontend, expectError: true,
+			name: "Notify missing _Ntf suffix", methodName: "TestNtf", inputName: "RPC_Test_Req", outputName: "",
+			notify: true, kind: kindBackend, expectError: true,
 		},
 		{
-			name: "Req missing _Req suffix", methodName: "ClaimReward", inputName: "CS_ClaimReward", outputName: "SC_ClaimReward_Rsp",
+			name: "Req missing _Req suffix", methodName: "Ping", inputName: "CS_Ping", outputName: "SC_Pong_Rsp",
 			notify: false, kind: kindFrontend, expectError: true,
 		},
 		{
-			name: "Rsp missing _Rsp suffix", methodName: "ClaimReward", inputName: "CS_ClaimReward_Req", outputName: "SC_ClaimReward",
+			name: "Rsp missing _Rsp suffix", methodName: "Ping", inputName: "CS_Ping_Req", outputName: "SC_Pong",
 			notify: false, kind: kindFrontend, expectError: true,
 		},
 		{

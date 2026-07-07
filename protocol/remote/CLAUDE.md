@@ -10,15 +10,14 @@
 ## 目录定位
 
 - 后端服务之间的 RPC remote 定义。
-- 当前主链路不保留 backend remote service，本目录暂不包含业务 proto。
+- 当前只保留 `lobby_remote.proto` 下的 `RPC_Test_Req`、`RPC_Test_Rsp`、`RPC_Test_Ntf` 样例。
 
 ## 主要文件
 
-- [`gate_remote.proto`](gate_remote.proto)
 - [`lobby_remote.proto`](lobby_remote.proto)
 
 ## 工作规则
 
 - 修改 remote 后要重新生成 `protocol/gen/remote/` 和 `protocol/gen/rpc.go`。
 - 没有对应服务实现的 remote 协议不要引入当前主链路。
-- 空 remote proto 不会生成 `protocol/gen/remote/*.go`，`protocol/gen/rpc.go` 只保留编排 helper。
+- 当前只生成 `protocol/gen/remote/lobby_remote.go` 和 `protocol/gen/rpc.go` 中的 `Lobby.Test` / `Lobby.TestNtf` 样例 stub。

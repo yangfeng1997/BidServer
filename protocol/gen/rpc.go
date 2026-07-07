@@ -8,12 +8,18 @@ import (
 
 	errcode "project/internal/core/errcode"
 	corerpc "project/internal/core/rpc"
+	remote "project/protocol/remote"
 )
 
 const (
 	serverTypeGate        = 1
 	serverTypeLobby       = 2
 	serverTypeRouterAgent = 6
+)
+
+const (
+	RouteLobbyRemoteTest    = "LobbyRemote/Test"
+	RouteLobbyRemoteTestNtf = "LobbyRemote/TestNtf"
 )
 
 type Stub struct {
@@ -89,7 +95,33 @@ func (s *Stub) typedSend(ctx corerpc.Ctx, route string, ntf proto.Message) {
 	s.core.Send(s.target, route, body, ctx)
 }
 
+type LobbyStub struct{ *Stub }
+
+func (s *LobbyStub) Test(ctx corerpc.Ctx, req *remote.RPC_Test_Req, cb func(*remote.RPC_Test_Rsp, error)) {
+	s.typedCall(ctx, RouteLobbyRemoteTest, req, func(body []byte, err error) {
+		if err != nil {
+			cb(nil, err)
+			return
+		}
+		var rsp remote.RPC_Test_Rsp
+		if uerr := proto.Unmarshal(body, &rsp); uerr != nil {
+			cb(nil, uerr)
+			return
+		}
+		cb(&rsp, nil)
+	})
+}
+
+func (s *LobbyStub) TestNtf(ctx corerpc.Ctx, ntf *remote.RPC_Test_Ntf) {
+	s.typedSend(ctx, RouteLobbyRemoteTestNtf, ntf)
+}
+
+var (
+	Lobby = &LobbyStub{Stub: NewStub(nil, serverTypeLobby)}
+)
+
 func Init(core *corerpc.Core) {
+	Lobby.Stub.core = core
 }
 
 type Next = corerpc.Next

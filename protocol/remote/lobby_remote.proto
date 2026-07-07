@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package protocol.remote;
+
+import "google/protobuf/empty.proto";
+import "protocol/common/options.proto";
+
+option go_package = "project/protocol/remote;remotepb";
+
+message RPC_Test_Req {}
+message RPC_Test_Rsp {}
+message RPC_Test_Ntf {}
+
+service LobbyRemote {
+  option (protocol.common.kind) = BACKEND;
+  option (protocol.common.server_type) = ST_LOBBYSVR;
+
+  rpc Test(RPC_Test_Req) returns (RPC_Test_Rsp);
+  rpc TestNtf(RPC_Test_Ntf) returns (google.protobuf.Empty);
+}

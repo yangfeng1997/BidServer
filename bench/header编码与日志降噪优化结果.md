@@ -20,7 +20,7 @@
 - `internal/core/ragent/sdk/client.go`
 - `internal/server/lobby/module.go`
 - `internal/server/gate/module.go`
-- `internal/server/gate/ping_tong_test.go`
+- `internal/server/gate/ping_pong_test.go`
 - `internal/core/ragent/wire/rpc_wire.go`
 
 ### 2. RPCWireHeaderLen
