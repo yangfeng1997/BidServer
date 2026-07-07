@@ -10,6 +10,7 @@ Examples:
 from __future__ import annotations
 
 import argparse
+import shutil
 import stat
 import sys
 from pathlib import Path
@@ -44,7 +45,7 @@ def main() -> None:
     values_raw = load_yaml(values_path)
     values = load_values(values_path)
     values["world_id"] = str(args.world_id)
-    values.setdefault("cluster_name", "bidserver")
+    values.setdefault("cluster_name", "gameserver")
     values.setdefault("cluster_env", args.env)
     services = services_from_values(values_raw)
     if args.svr:
@@ -55,6 +56,9 @@ def main() -> None:
     validate_services(root, conf_dir, services)
     targets = build_targets(conf_dir, out_dir, services)
     print_plan(args.env, values_path, out_dir, values, targets, args.dry_run)
+
+    if not args.dry_run:
+        reset_runtime_dir(out_dir)
 
     for name, src, dst in targets:
         bake_file(src, dst, values, args.dry_run, name=name)
@@ -154,6 +158,13 @@ def print_plan(env: str, values_path: Path, out_dir: Path, values: dict[str, str
         print(f"target {name:<8} {src} -> {dst}")
 
 
+def reset_runtime_dir(out_dir: Path) -> None:
+    if out_dir.exists():
+        if not out_dir.is_dir():
+            sys.exit(f"ERROR: runtime output path is not a directory: {out_dir}")
+        shutil.rmtree(out_dir)
+
+
 def prepare_runtime_dirs(out_dir: Path, services: list[str]) -> None:
     (out_dir / "common" / "conf").mkdir(parents=True, exist_ok=True)
     for service in services:
@@ -164,7 +175,7 @@ def prepare_runtime_dirs(out_dir: Path, services: list[str]) -> None:
 def write_runtime_scripts(out_dir: Path, services: list[str], world_id: int) -> None:
     for service in services:
         write_service_scripts(out_dir, service, world_id)
-    write_all_script(out_dir / "startall.sh", services, "start")
+    write_start_all_script(out_dir / "startall.sh", services)
     write_all_script(out_dir / "stopall.sh", reversed(services), "stop")
 
 
@@ -215,6 +226,32 @@ def write_all_script(path: Path, services: Any, action: str) -> None:
             [
                 f'echo "=== {action} {service} ==="',
                 f'./{service}/bin/{action}.sh',
+                'code=$?',
+                'if [ "$code" -ne 0 ]; then',
+                '    ret=$code',
+                'fi',
+            ]
+        )
+    lines.append('exit "$ret"')
+    write_executable(path, "\n".join(lines) + "\n")
+
+
+def write_start_all_script(path: Path, services: list[str]) -> None:
+    lines = ["#!/bin/sh", 'DIR="$(cd "$(dirname "$0")" && pwd)"', 'cd "$DIR" || exit 1']
+    for service in services:
+        lines.extend(
+            [
+                f'echo "=== clean log {service} ==="',
+                f'rm -rf ./{service}/log',
+                f'mkdir -p ./{service}/log',
+            ]
+        )
+    lines.append("ret=0")
+    for service in services:
+        lines.extend(
+            [
+                f'echo "=== start {service} ==="',
+                f'./{service}/bin/start.sh',
                 'code=$?',
                 'if [ "$code" -ne 0 ]; then',
                 '    ret=$code',

@@ -6,11 +6,11 @@ svr_list:
   - matchsvr
   - roomsvr
 
-gate_listen_tcp: "0.0.0.0:7001"
-gate_listen_ws: "0.0.0.0:7002"
+gate_listen_tcp: "0.0.0.0:5555"
+gate_listen_ws: "0.0.0.0:5556"
 routeragent_sock_path: "/tmp/routeragent/ra.sock"
 routeragent_listen_addr: "127.0.0.1:7100"
-cluster_name: "bidserver"
+cluster_name: "gameserver"
 cluster_env: "dev"
 etcd_endpoint_1: "http://tencent.codepeak.cn:2379"
 etcd_endpoint_2: "http://tencent.codepeak.cn:2479"

@@ -36,7 +36,7 @@
 ## 验证
 
 ```text
-go test ./internal/server/routeragent ./internal/core/ragent ./internal/server/gate ./internal/server/lobby ./tools/client_sim
+go test ./internal/server/routeragent ./internal/core/ragent ./internal/server/gate ./internal/server/lobby ./tools/client_robot
 PASS
 
 go test ./...

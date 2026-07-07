@@ -21,10 +21,10 @@
 ## 拓扑
 
 ```text
-client_sim x N
-  -> gatesvr1..N -> RA1 UDS /tmp/bidserver_cross_ra1.sock
+client_robot x N
+  -> gatesvr1..N -> RA1 UDS /tmp/gameserver_cross_ra1.sock
   -> RA1 TCP 127.0.0.1:7300 <-> RA2 TCP 127.0.0.1:7301
-  -> RA2 UDS /tmp/bidserver_cross_ra2.sock -> lobbysvr1..N
+  -> RA2 UDS /tmp/gameserver_cross_ra2.sock -> lobbysvr1..N
 ```
 
 节点：

@@ -240,3 +240,4 @@ func (cfg *LoggerGroupConfig) Validate() error {
 	}
 	return nil
 }
+

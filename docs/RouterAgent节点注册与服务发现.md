@@ -62,9 +62,9 @@ world.serverType.index
 示例：
 
 ```text
-/bidserver/dev/worlds/99/nodes/99.6.0
-/bidserver/dev/worlds/99/nodes/99.1.0
-/bidserver/dev/worlds/99/nodes/99.2.0
+/gameserver/dev/worlds/99/nodes/99.6.0
+/gameserver/dev/worlds/99/nodes/99.1.0
+/gameserver/dev/worlds/99/nodes/99.2.0
 ```
 
 当前测试期主要依赖 `world_id` 隔离；`cluster_env` 仍写入路径，方便后续同 world 多环境共用 etcd 时继续隔离。

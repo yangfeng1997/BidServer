@@ -47,7 +47,7 @@ type registeredNode struct {
 // NodePrefix 返回当前集群和 world 下的节点发现前缀。
 func NodePrefix(clusterName, clusterEnv string, worldID uint32) string {
 	if clusterName == "" {
-		clusterName = "bidserver"
+		clusterName = "gameserver"
 	}
 	return fmt.Sprintf("/%s/%s/worlds/%d/nodes", clusterName, clusterEnv, worldID)
 }

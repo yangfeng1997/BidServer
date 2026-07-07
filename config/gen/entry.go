@@ -30,3 +30,4 @@ func NewRoomConfigEntry(path string) (*config.ConfigEntry[RoomConfig], error) {
 func NewRouteragentConfigEntry(path string) (*config.ConfigEntry[RouteragentConfig], error) {
 	return config.NewConfigEntry(path, LoadRouteragent, CheckRouteragentReload)
 }
+

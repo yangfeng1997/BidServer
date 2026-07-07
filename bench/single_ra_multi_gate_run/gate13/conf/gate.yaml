@@ -2,7 +2,7 @@ listen_tcp: "0.0.0.0:7013"
 listen_ws: "0.0.0.0:7113"
 max_conn: 20000
 heartbeat_sec: 30
-routeragent_sock_path: "/tmp/bidserver_single_ra_multi_gate.sock"
+routeragent_sock_path: "/tmp/gameserver_single_ra_multi_gate.sock"
 logger_group:
   main:
     level: warn

@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-本文件是 `tools/client_sim/` 的局部索引。进入客户端模拟工具目录时，先读本文件，再看 `main.go`。
+本文件是 `tools/client_robot/` 的局部索引。进入客户端模拟工具目录时，先读本文件，再看 `main.go`。
 
 ## 上级入口
 

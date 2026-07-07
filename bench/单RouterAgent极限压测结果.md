@@ -14,7 +14,7 @@
 2. 二次检查仍存活的 benchmark 服务进程并强制停止。
 3. 等待 `15s`，让 etcd lease TTL 过期，避免旧节点注册残留。
 4. 重启本轮所需的 RouterAgent / lobby / gate。
-5. 用 pprof cmdline 和 client_sim smoke test 校验端口与链路。
+5. 用 pprof cmdline 和 client_robot smoke test 校验端口与链路。
 
 未使用 `stopall.sh` / `startall.sh`，未运行配置 bake / dry-run。
 
@@ -23,7 +23,7 @@
 所有业务进程共享同一个 RouterAgent UDS：
 
 ```text
-/tmp/bidserver_single_ra_multi_gate.sock
+/tmp/gameserver_single_ra_multi_gate.sock
 ```
 
 RouterAgent：

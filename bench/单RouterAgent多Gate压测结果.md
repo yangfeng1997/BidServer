@@ -9,11 +9,11 @@
 ## 拓扑
 
 ```text
-client_sim x4
-  -> gatesvr1 127.0.0.1:7001 -> RouterAgent UDS /tmp/bidserver_single_ra_multi_gate.sock -> lobbysvr1
-  -> gatesvr2 127.0.0.1:7002 -> RouterAgent UDS /tmp/bidserver_single_ra_multi_gate.sock -> lobbysvr2
-  -> gatesvr3 127.0.0.1:7003 -> RouterAgent UDS /tmp/bidserver_single_ra_multi_gate.sock -> lobbysvr3
-  -> gatesvr4 127.0.0.1:7004 -> RouterAgent UDS /tmp/bidserver_single_ra_multi_gate.sock -> lobbysvr4
+client_robot x4
+  -> gatesvr1 127.0.0.1:7001 -> RouterAgent UDS /tmp/gameserver_single_ra_multi_gate.sock -> lobbysvr1
+  -> gatesvr2 127.0.0.1:7002 -> RouterAgent UDS /tmp/gameserver_single_ra_multi_gate.sock -> lobbysvr2
+  -> gatesvr3 127.0.0.1:7003 -> RouterAgent UDS /tmp/gameserver_single_ra_multi_gate.sock -> lobbysvr3
+  -> gatesvr4 127.0.0.1:7004 -> RouterAgent UDS /tmp/gameserver_single_ra_multi_gate.sock -> lobbysvr4
 ```
 
 节点：
@@ -26,7 +26,7 @@ client_sim x4
 
 ## 压测参数
 
-每个 gate 启动一个 client_sim：
+每个 gate 启动一个 client_robot：
 
 ```text
 clients=500
@@ -108,5 +108,5 @@ routeragent_incoming_peer_seq 0
 
 - 单链路上限主要在 gate。
 - 多 gate 聚合后，单 RouterAgent 还没饱和，但已经出现 UDS / 调度 / routeFrame 侧排队迹象。
-- 下一步如果要找单 RouterAgent 的真实上限，应继续增加 gate/lobby/client_sim 数量，直到 RouterAgent CPU 接近打满或 p99 明显失控。
+- 下一步如果要找单 RouterAgent 的真实上限，应继续增加 gate/lobby/client_robot 数量，直到 RouterAgent CPU 接近打满或 p99 明显失控。
 - 如果目标是生产形态扩展能力，更值得转向 `N gate + N lobby + N RouterAgent` 分片压测，验证横向扩展是否接近线性。

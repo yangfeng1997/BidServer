@@ -1,4 +1,4 @@
-sock_path: "/tmp/bidserver_cross_ra1.sock"
+sock_path: "/tmp/gameserver_cross_ra1.sock"
 listen_addr: "127.0.0.1:7300"
 heartbeat_sec: 30
 logger_group:

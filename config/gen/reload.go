@@ -543,3 +543,4 @@ func CheckRouteragentReload(candidate *RouteragentConfig, current *RouteragentCo
 	}
 	return nil
 }
+

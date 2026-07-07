@@ -1,4 +1,4 @@
-sock_path: "/tmp/bidserver_single_ra_multi_gate.sock"
+sock_path: "/tmp/gameserver_single_ra_multi_gate.sock"
 listen_addr: "127.0.0.1:7200"
 heartbeat_sec: 30
 logger_group:

@@ -13,7 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `go test ./internal/core/codec -run TestEncodeDecodeRequest`：运行单包单测；替换包路径和测试名即可。
 - `go test ./internal/core/codec -bench BenchmarkEncodeRequest`：运行单包 benchmark。
 - `make gen-config`：运行 `go run ./tools/configgen`，根据 `config/schema/*.proto` 生成 `config/gen/`。
-- `make config ENV=dev WORLDID=1`：先生成配置代码，再把 `config/values/dev.yaml` 烘焙到 `run/`；`WORLDID` 必填，范围 `1..65535`。
+- `make config ENV=dev WORLDID=1`：先生成配置代码，清空 `run/` 后再把 `config/values/dev.yaml` 烘焙进去；`WORLDID` 必填，范围 `1..65535`。
 - `make build`：读取 `run/ENV` 和 `config/values/<env>.yaml` 的 `svr_list`，构建服务二进制并复制到 `run/<svc>/bin/`；需要先执行 `make config ...`。
 - `make all ENV=dev WORLDID=1`：按 `config -> build -> test` 执行完整链路。
 - `python scripts/config.py --env dev --world-id 1 --dry-run`：只打印配置烘焙计划，不写入 `run/`。
@@ -22,7 +22,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `go run ./tools/servergen --name <svc> --kind standard --register-env dev --dry-run`：预览新服务骨架生成；去掉 `--dry-run` 后才写文件。
 - `make clean`：删除 `build/` 和 `run/`；`make run-clean` 只删除 `run/`。
 
-运行目录由 `make config` 和 `make build` 生成。服务脚本在 `run/<svc>/bin/start.sh`、`run/<svc>/bin/stop.sh`，整体脚本在 `run/startall.sh`、`run/stopall.sh`。命令行入口都支持 `--pid-file`、`--nodeid`、`--common-config`、服务私有 `--<svc>-config`、`--daemon`、`--pprof`、`--pprof-addr`。
+运行目录由 `make config` 和 `make build` 生成；每次 `make config` 会先删除旧 `run/`。服务脚本在 `run/<svc>/bin/start.sh`、`run/<svc>/bin/stop.sh`，整体脚本在 `run/startall.sh`、`run/stopall.sh`；`run/startall.sh` 启动前会清空各服务 `log/`。命令行入口都支持 `--pid-file`、`--nodeid`、`--common-config`、服务私有 `--<svc>-config`、`--daemon`、`--pprof`、`--pprof-addr`。
 
 ## 项目概览
 
@@ -76,7 +76,7 @@ RouterAgent 数据面核心不在 `internal/server/routeragent/`，而在 `inter
 
 ## 配置链路
 
-配置事实源是 `config/schema/*.proto` 和 `config/*.yaml` / `config/*.yaml.tmpl`。`config/gen/` 是生成产物，不手改。`config/values/<env>.yaml` 提供环境值和 `svr_list`；`scripts/config.py` 会把模板烘焙到 `run/common/conf/` 和 `run/<svc>/conf/`，同时生成启动/停止脚本和 `run/ENV`。
+配置事实源是 `config/schema/*.proto` 和 `config/*.yaml` / `config/*.yaml.tmpl`。`config/gen/` 是生成产物，不手改。`config/values/<env>.yaml` 提供环境值和 `svr_list`；`scripts/config.py` 会先重建 `run/`，再把模板烘焙到 `run/common/conf/` 和 `run/<svc>/conf/`，同时生成启动/停止脚本和 `run/ENV`。
 
 运行时配置入口是 `config/gen` 生成的 `NewXxxConfigEntry`。服务包的 `config.go` 保存包级 entry，并提供 `CommonConfig()`、`GateConfig()`、`LobbyConfig()` 等访问函数。热更规则由 schema 的 `(config.reload)` 控制；未标记 reload 的字段变化会被 generated check 拒绝。
 
