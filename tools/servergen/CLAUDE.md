@@ -11,6 +11,7 @@
 
 - 服务壳生成器。
 - 这里负责生成 `cmd/<svc>/`、`internal/server/<svc>/`、`config/schema/<svc>.proto`、`config/<svc>.yaml` 等壳文件。
+- 标准服务壳会生成 `--nodeid` 支持、RouterAgent client 模块和 `routeragent_sock_path` 配置。
 
 ## 主要文件
 
@@ -28,4 +29,5 @@
 
 - 这里只生成服务壳，不生成业务逻辑。
 - 默认不覆盖已有服务；只有显式 `--force` 才允许覆盖生成器负责的文件。
+- `--register-env` 只追加服务到 `svr_list` 末尾，保留原有启动顺序。
 - 改模板时要同步生成方案文档。

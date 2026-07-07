@@ -22,7 +22,7 @@
 - [`onlinesvr.proto`](onlinesvr.proto)
 - [`options.proto`](options.proto)
 - [`roomsvr.proto`](roomsvr.proto)
-- [`routersvr.proto`](routersvr.proto)
+- [`routeragent.proto`](routeragent.proto)
 - [`types.proto`](types.proto)
 
 ## 工作规则

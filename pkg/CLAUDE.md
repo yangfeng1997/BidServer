@@ -11,12 +11,13 @@
 ## 目录定位
 
 - 可复用基础库。
-- 当前包括日志封装、事件总线、序列化接口、任务队列和时间轮。
+- 当前包括日志封装、事件总线、Mongo 异步封装、序列化接口、任务队列和时间轮。
 
 ## 子目录
 
 - [`event/`](event/)
 - [`logger/`](logger/)
+- [`mongo/`](mongo/)
 - [`serialize/`](serialize/)
 - [`taskqueue/`](taskqueue/)
 - [`timewheel/`](timewheel/)

@@ -1,198 +1,216 @@
-// gen_routes 扫描 protocal/ 目录下所有 .proto 文件，
-// 提取 msg_id、server_type、handler_method option，生成路由映射表。
-//
-// 用法：go run ./tools/gen_routes
 package main
 
 import (
-	"bufio"
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 )
 
-type msgInfo struct {
-	name          string
-	msgID         uint32
-	serverType    string
-	handlerMethod string
+type routeItem struct {
+	CmdID      string
+	ServerType string
+	Route      string
+	RspCmdID   string
+	NoAuth     bool
 }
 
 var (
-	msgBlockRe      = regexp.MustCompile(`(?s)message\s+(\w+)\s*\{([^}]*)\}`)
-	msgIDRe         = regexp.MustCompile(`\(options\.msg_id\)\s*=\s*(\d+)`)
-	serverTypeRe    = regexp.MustCompile(`\(options\.server_type\)\s*=\s*"([^"]+)"`)
-	handlerMethodRe = regexp.MustCompile(`\(options\.handler_method\)\s*=\s*"([^"]+)"`)
+	serviceStartRE = regexp.MustCompile(`(?m)^\s*service\s+(\w+)\s*\{`)
+	messageStartRE = regexp.MustCompile(`(?m)^\s*message\s+(\w+)\s*\{`)
+	rpcRE          = regexp.MustCompile(`rpc\s+(\w+)\s*\(([\w.]+)\)\s*returns\s*\(([\w.]+)\)`)
+	cmdIDRE        = regexp.MustCompile(`option\s*\(protocol\.common\.cmd_id\)\s*=\s*(\d+)\s*;`)
+	noAuthRE       = regexp.MustCompile(`option\s*\(protocol\.common\.no_auth\)\s*=\s*true\s*;`)
+	kindRE         = regexp.MustCompile(`option\s*\(protocol\.common\.kind\)\s*=\s*(\w+)\s*;`)
+	serverTypeRE   = regexp.MustCompile(`option\s*\(protocol\.common\.server_type\)\s*=\s*(\w+)\s*;`)
 )
 
 func main() {
-	protoDir := "protocal"
-	outDir := "protocal/gen/routes"
+	var protoDir string
+	var out string
+	flag.StringVar(&protoDir, "proto", "protocol/handler", "proto directory")
+	flag.StringVar(&out, "out", "protocol/gen/routes.go", "output file")
+	flag.Parse()
 
-	var msgs []msgInfo
-
-	err := filepath.WalkDir(protoDir, func(path string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".proto") {
-			return err
-		}
-		// 跳过 options.proto 和 cluster.proto（系统 proto，不含业务消息）
-		base := filepath.Base(path)
-		if base == "options.proto" || base == "cluster.proto" {
-			return nil
-		}
-		parsed, parseErr := parseProto(path)
-		if parseErr != nil {
-			fmt.Fprintf(os.Stderr, "parse %s failed: %v\n", path, parseErr)
-			return nil
-		}
-		msgs = append(msgs, parsed...)
-		return nil
-	})
+	routes, err := scanRoutes(protoDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "walk failed: %v\n", err)
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-
-	// 按 msgID 排序，生成稳定输出
-	sort.Slice(msgs, func(i, j int) bool { return msgs[i].msgID < msgs[j].msgID })
-
-	if err := os.MkdirAll(outDir, 0755); err != nil {
-		fmt.Fprintf(os.Stderr, "mkdir failed: %v\n", err)
+	if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-
-	if err := generateRouteFile(outDir, msgs); err != nil {
-		fmt.Fprintf(os.Stderr, "generate failed: %v\n", err)
+	if err := os.WriteFile(out, []byte(renderRoutes(routes)), 0o644); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-
-	fmt.Printf("generated %d message routes → %s/routes.go\n", len(msgs), outDir)
 }
 
-func parseProto(path string) ([]msgInfo, error) {
-	f, err := os.Open(path)
+func scanRoutes(dir string) ([]routeItem, error) {
+	files, err := filepath.Glob(filepath.Join(dir, "*.proto"))
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
-
-	var sb strings.Builder
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := scanner.Text()
-		// 去掉行注释，避免干扰正则
-		if idx := strings.Index(line, "//"); idx >= 0 {
-			line = line[:idx]
+	var items []routeItem
+	for _, path := range files {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
 		}
-		sb.WriteString(line + "\n")
+		text := string(b)
+		messages, err := extractBlocks(text, messageStartRE)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", path, err)
+		}
+		services, err := extractBlocks(text, serviceStartRE)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", path, err)
+		}
+		for name, body := range services {
+			if firstMatch(kindRE, body) != "FRONTEND" {
+				continue
+			}
+			serverType := firstMatch(serverTypeRE, body)
+			if serverType == "" {
+				continue
+			}
+			for _, rpcMatch := range rpcRE.FindAllStringSubmatch(body, -1) {
+				rpcName := rpcMatch[1]
+				input := rpcMatch[2]
+				output := rpcMatch[3]
+				inputMsg, ok := messages[input]
+				if !ok {
+					continue
+				}
+				cmdID := firstMatch(cmdIDRE, inputMsg)
+				if cmdID == "" {
+					continue
+				}
+				// cmd_id=0 保留，不允许使用
+				if cmdID == "0" {
+					return nil, fmt.Errorf("%s: message %s has cmd_id=0 which is reserved", path, input)
+				}
+				rspCmdID := "0"
+				if output != "google.protobuf.Empty" {
+					if outputMsg, ok := messages[output]; ok {
+						rspCmdID = firstMatch(cmdIDRE, outputMsg)
+						if rspCmdID == "" {
+							rspCmdID = "0"
+						}
+					}
+				}
+				items = append(items, routeItem{
+					CmdID:      cmdID,
+					ServerType: serverTypeToConst(serverType),
+					Route:      name + "/" + rpcName,
+					RspCmdID:   rspCmdID,
+					NoAuth:     noAuthRE.MatchString(inputMsg),
+				})
+			}
+		}
 	}
-	content := sb.String()
+	// 校验 cmd_id 全局唯一
+	seen := make(map[string]bool)
+	for _, it := range items {
+		if seen[it.CmdID] {
+			return nil, fmt.Errorf("cmd_id %s is duplicated", it.CmdID)
+		}
+		seen[it.CmdID] = true
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].CmdID < items[j].CmdID })
+	return items, nil
+}
 
-	var result []msgInfo
-	for _, m := range msgBlockRe.FindAllStringSubmatch(content, -1) {
-		name := m[1]
-		body := m[2]
-
-		idMatch := msgIDRe.FindStringSubmatch(body)
-		if idMatch == nil {
+func extractBlocks(text string, startRE *regexp.Regexp) (map[string]string, error) {
+	matches := startRE.FindAllStringSubmatchIndex(text, -1)
+	out := make(map[string]string, len(matches))
+	for _, m := range matches {
+		if len(m) < 4 {
 			continue
 		}
-		id64, _ := strconv.ParseUint(idMatch[1], 10, 32)
-		msgID := uint32(id64)
-
-		var serverType, handlerMethod string
-		if st := serverTypeRe.FindStringSubmatch(body); st != nil {
-			serverType = st[1]
+		name := text[m[2]:m[3]]
+		open := m[1] - 1
+		if open < 0 || open >= len(text) || text[open] != '{' {
+			return nil, fmt.Errorf("block %s missing opening brace", name)
 		}
-		if hm := handlerMethodRe.FindStringSubmatch(body); hm != nil {
-			handlerMethod = hm[1]
-		} else if serverType != "" {
-			// 未指定 handler_method 时，按消息名自动推导
-			// CS_ClaimReward_Req → 去掉前缀 CS_，去掉后缀 _Req/_OneWay，转小写
-			handlerMethod = inferHandlerMethod(name, serverType)
+		close, err := matchBrace(text, open)
+		if err != nil {
+			return nil, fmt.Errorf("block %s: %w", name, err)
 		}
-
-		result = append(result, msgInfo{
-			name:          name,
-			msgID:         msgID,
-			serverType:    serverType,
-			handlerMethod: handlerMethod,
-		})
+		out[name] = text[open+1 : close]
 	}
-	return result, nil
+	return out, nil
 }
 
-// inferHandlerMethod 从消息名推导 handler 方法名
-// CS_ClaimReward_Req → "HandlerTypeName.claimreward"（需要 server_type 推导类型名）
-func inferHandlerMethod(msgName, serverType string) string {
-	// 去掉 CS_/SC_/RPC_ 前缀
-	name := msgName
-	for _, prefix := range []string{"CS_", "SC_", "RPC_"} {
-		name = strings.TrimPrefix(name, prefix)
+func matchBrace(text string, open int) (int, error) {
+	depth := 0
+	for i := open; i < len(text); i++ {
+		switch text[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return i, nil
+			}
+		}
 	}
-	// 去掉 _Req/_Rsp/_OneWay 后缀
-	for _, suffix := range []string{"_Req", "_Rsp", "_OneWay"} {
-		name = strings.TrimSuffix(name, suffix)
-	}
-	// 推导类型名：worldsvr → WorldHandler
-	typeName := strings.Title(strings.TrimSuffix(serverType, "svr")) + "Handler"
-	return typeName + "." + strings.ToLower(name)
+	return 0, fmt.Errorf("unmatched brace")
 }
 
-func generateRouteFile(outDir string, msgs []msgInfo) error {
-	var sb strings.Builder
-	sb.WriteString("// Code generated by tools/gen_routes. DO NOT EDIT.\n")
-	sb.WriteString("// Run: go run ./tools/gen_routes\n\n")
-	sb.WriteString("package routes\n\n")
+func firstMatch(re *regexp.Regexp, s string) string {
+	m := re.FindStringSubmatch(s)
+	if len(m) < 2 {
+		return ""
+	}
+	return m[1]
+}
 
-	// MsgRouteTable：有 handlerMethod 且无 serverType（本地处理）
-	// 或有 handlerMethod 且有 serverType（backend 上本地处理）
-	sb.WriteString("// MsgRouteTable msgID → handler route，服务器本地处理用\n")
-	sb.WriteString("var MsgRouteTable = map[uint32]string{\n")
-	for _, m := range msgs {
-		if m.handlerMethod != "" {
-			sb.WriteString(fmt.Sprintf("\t%d: %q, // %s\n", m.msgID, m.handlerMethod, m.name))
+func serverTypeToConst(name string) string {
+	switch strings.TrimSpace(name) {
+	case "ST_GATESVR":
+		return "serverTypeGate"
+	case "ST_LOBBYSVR":
+		return "serverTypeLobby"
+	case "ST_ROOMSVR":
+		return "serverTypeRoom"
+	case "ST_MATCHSVR":
+		return "serverTypeMatch"
+	case "ST_ONLINESVR":
+		return "serverTypeOnline"
+	case "ST_ROUTERAGENT":
+		return "serverTypeRouterAgent"
+	default:
+		return name
+	}
+}
+
+func renderRoutes(routes []routeItem) string {
+	var b strings.Builder
+	b.WriteString("package rpc\n\n")
+	b.WriteString("// RouteEntry 描述一条已生成的路由\n")
+	b.WriteString("type RouteEntry struct {\n")
+	b.WriteString("\tServerType uint32\n")
+	b.WriteString("\tRoute string\n")
+	b.WriteString("\tRspCmdID uint32\n")
+	b.WriteString("}\n\n")
+	b.WriteString("// RouteTable 是客户端入口路由表\n")
+	b.WriteString("var RouteTable = map[uint32]RouteEntry{\n")
+	for _, r := range routes {
+		b.WriteString(fmt.Sprintf("\t%s: {ServerType: %s, Route: %q, RspCmdID: %s},\n", r.CmdID, r.ServerType, r.Route, r.RspCmdID))
+	}
+	b.WriteString("}\n\n")
+	b.WriteString("// AuthWhitelist 表示免鉴权的 CmdID 集合\n")
+	b.WriteString("var AuthWhitelist = map[uint32]bool{\n")
+	for _, r := range routes {
+		if r.NoAuth {
+			b.WriteString(fmt.Sprintf("\t%s: true,\n", r.CmdID))
 		}
 	}
-	sb.WriteString("}\n\n")
-
-	// ForwardTable：有 serverType 的消息（gate 需要转发）
-	sb.WriteString("// ForwardTable msgID → 目标 serverType，gate 转发用\n")
-	sb.WriteString("var ForwardTable = map[uint32]string{\n")
-	for _, m := range msgs {
-		if m.serverType != "" {
-			sb.WriteString(fmt.Sprintf("\t%d: %q, // %s\n", m.msgID, m.serverType, m.name))
-		}
-	}
-	sb.WriteString("}\n\n")
-
-	// RespMsgIDTable：推导请求→响应的 msgID 映射（相邻奇偶数约定）
-	// 约定：请求 msgID 为奇数，响应为 请求+1
-	// 也可以通过 proto option 显式指定，此处用简单约定
-	sb.WriteString("// RespMsgIDTable 请求 msgID → 响应 msgID\n")
-	sb.WriteString("var RespMsgIDTable = map[uint32]uint32{\n")
-	// 构建 msgID set
-	idSet := make(map[uint32]bool)
-	for _, m := range msgs {
-		idSet[m.msgID] = true
-	}
-	for _, m := range msgs {
-		if m.serverType != "" && idSet[m.msgID+1] {
-			sb.WriteString(fmt.Sprintf("\t%d: %d, // %s\n", m.msgID, m.msgID+1, m.name))
-		}
-	}
-	sb.WriteString("}\n\n")
-
-	// Config 辅助函数，供 app.WithRoutes 一行调用
-	sb.WriteString("// Config 返回所有路由表，供 app.WithRoutes(routes.Config()) 使用\n")
-	sb.WriteString("func Config() (map[uint32]string, map[uint32]string, map[uint32]uint32) {\n")
-	sb.WriteString("\treturn MsgRouteTable, ForwardTable, RespMsgIDTable\n")
-	sb.WriteString("}\n")
-
-	outPath := filepath.Join(outDir, "routes.go")
-	return os.WriteFile(outPath, []byte(sb.String()), 0644)
+	b.WriteString("}\n")
+	return b.String()
 }

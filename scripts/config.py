@@ -128,6 +128,12 @@ def server_type(service: str) -> int:
             return 1
         case "lobbysvr":
             return 2
+        case "roomsvr":
+            return 3
+        case "matchsvr":
+            return 4
+        case "onlinesvr":
+            return 5
         case "routeragent":
             return 6
         case _:

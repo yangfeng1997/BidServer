@@ -12,6 +12,7 @@
 
 - 配置源、配置生成产物和环境值目录。
 - `schema/` 是事实源，`gen/` 是生成产物，`values/` 是环境取值，`secrets/` 是示例密钥输入。
+- `CommonConfig` 当前包含 cluster、etcd、redis、mongo 公共配置。
 
 ## 子目录
 
@@ -25,6 +26,9 @@
 - [`common.yaml`](common.yaml)
 - [`gate.yaml`](gate.yaml)
 - [`lobby.yaml`](lobby.yaml)
+- [`match.yaml`](match.yaml)
+- [`online.yaml`](online.yaml)
+- [`room.yaml`](room.yaml)
 - [`routeragent.yaml`](routeragent.yaml)
 
 ## 快速读法

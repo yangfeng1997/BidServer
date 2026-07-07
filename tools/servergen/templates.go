@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/pflag"
 
+	"project/internal/core/nodeid"
 	opt "project/internal/core/options"
 	"project/internal/core/process"
 	"project/internal/server/{{.PackageName}}"
@@ -35,6 +36,12 @@ func execute() error {
 	if opts.{{.Title}}ConfigPath == "" {
 		return fmt.Errorf("{{.PackageName}} config path is required")
 	}
+	if opts.NodeID == "" {
+		return fmt.Errorf("nodeid is required")
+	}
+	if _, err := nodeid.Parse(opts.NodeID); err != nil {
+		return err
+	}
 	if opts.Daemon {
 		started, err := process.StartDaemon()
 		if err != nil {
@@ -52,6 +59,7 @@ func execute() error {
 			Pprof:            opts.Pprof,
 			PprofAddr:        opts.PprofAddr,
 			CommonConfigPath: opts.CommonConfigPath,
+			NodeID:           opts.NodeID,
 		},
 		{{.Title}}ConfigPath: opts.{{.Title}}ConfigPath,
 	})
@@ -74,6 +82,7 @@ func execute() error {
 
 func bindFlags(opts *{{.PackageName}}.Options) {
 	pflag.StringVarP(&opts.PidFile, "pid-file", "p", "{{.ServiceName}}.pid", "pid file path")
+	pflag.StringVar(&opts.NodeID, "nodeid", "", "node id in world.serverType.index format")
 	pflag.StringVar(&opts.CommonConfigPath, "common-config", "", "common config path")
 	pflag.StringVar(&opts.{{.Title}}ConfigPath, "{{.PackageName}}-config", "", "{{.PackageName}} config path")
 	pflag.BoolVar(&opts.Daemon, "daemon", false, "run as daemon")
@@ -216,7 +225,9 @@ func New{{.Title}}Builder(opts Options) *Builder {
 	baseBuilder := app.NewBaseBuilder(nil)
 	baseBuilder.SetDaemon(opts.Daemon)
 	baseBuilder.SetPprof(opts.Pprof, opts.PprofAddr)
-	baseBuilder.AddShutdownHook(loggerGroup.Shutdown)
+	baseBuilder.SetNodeID(opts.NodeID)
+{{if eq .ServiceKind "standard"}}	baseBuilder.AddModule(NewModule())
+{{end}}	baseBuilder.AddShutdownHook(loggerGroup.Shutdown)
 	baseBuilder.AddReloadHook(ReloadConfig)
 
 	return &Builder{BaseBuilder: baseBuilder}
@@ -247,6 +258,78 @@ func newLoggerGroup(opts opt.BaseOptions, cfg configgen.LoggerGroupConfig) *logg
 }
 `
 
+const serverModuleTemplate = `package {{.PackageName}}
+
+import (
+	"context"
+	"fmt"
+	"sync"
+
+	"project/internal/core/app"
+	"project/internal/core/ragent/sdk"
+	ragentwire "project/internal/core/ragent/wire"
+)
+
+const moduleName = "{{.PackageName}}"
+
+type Module struct {
+	app.BaseModule
+	ready    *app.Ready
+	cfg      *{{.Title}}ConfigEntry
+	client   *sdk.Client
+	stopOnce sync.Once
+}
+
+func NewModule() *Module {
+	return &Module{ready: app.NewReady()}
+}
+
+func (m *Module) Name() string { return moduleName }
+
+func (m *Module) Init() error {
+	entry := {{.PackageName}}ConfigEntry
+	if entry == nil {
+		return fmt.Errorf("{{.PackageName}} config entry is nil")
+	}
+	m.cfg = entry
+	cfg := entry.Get()
+	if cfg == nil {
+		return fmt.Errorf("{{.PackageName}} config is nil")
+	}
+	poster, ok := m.App().(app.Poster)
+	if !ok {
+		return fmt.Errorf("{{.PackageName}} app does not implement poster")
+	}
+	m.client = sdk.NewClient(m.App().NodeIDUint32(), cfg.RouteragentSockPath, poster, m.handleRagentFrame)
+	return nil
+}
+
+func (m *Module) AfterInit() error {
+	if err := m.client.Connect(); err != nil {
+		m.ready.Fail(err)
+		return err
+	}
+	m.ready.Done()
+	return nil
+}
+
+func (m *Module) WaitReady(ctx context.Context) error { return m.ready.WaitReady(ctx) }
+
+func (m *Module) BeforeShutdown() {
+	m.stopOnce.Do(func() {
+		if m.client != nil {
+			_ = m.client.Close()
+		}
+	})
+}
+
+func (m *Module) Shutdown() {}
+
+func (m *Module) handleRagentFrame(frame ragentwire.Frame) {
+	// TODO: register RPC/notify routes for {{.ServiceName}} when service protocols are added.
+}
+`
+
 const schemaTemplate = `syntax = "proto3";
 
 package config;
@@ -265,16 +348,16 @@ message {{.ConfigType}} {
   int32 heartbeat_sec = 3 [(config.required) = true, (config.reload) = true];
   LoggerGroupConfig logger_group = 4;
 {{else}}
-  string listen_addr = 1 [(config.required) = true, (config.env) = true];
+  string routeragent_sock_path = 1 [(config.required) = true, (config.env) = true];
   int32 heartbeat_sec = 2 [(config.required) = true, (config.reload) = true];
   LoggerGroupConfig logger_group = 3;
 {{end}}
 }
 `
 
-const configTemplate = `{{if eq .ServiceKind "sidecar"}}sock_path: "${{.ServiceName}}_sock_path"
-listen_addr: "${{.ServiceName}}_listen_addr"
-{{else}}listen_addr: "${{.ServiceName}}_listen_addr"
+const configTemplate = `{{if eq .ServiceKind "sidecar"}}sock_path: "{{printf "${%s_sock_path}" .ServiceName}}"
+listen_addr: "{{printf "${%s_listen_addr}" .ServiceName}}"
+{{else}}routeragent_sock_path: "${routeragent_sock_path}"
 {{end}}heartbeat_sec: 30
 
 logger_group:

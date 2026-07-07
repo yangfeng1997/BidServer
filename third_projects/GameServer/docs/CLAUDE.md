@@ -15,7 +15,9 @@
 
 ## 子目录
 
-- [`superpowers/`](superpowers/)
+- [`design/`](design/)
+- [`plans/`](plans/)
+- [`todolist/`](todolist/)
 
 ## 工作规则
 

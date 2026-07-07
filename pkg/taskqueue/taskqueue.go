@@ -8,6 +8,11 @@ import (
 
 const defaultSize = 256
 
+// TaskQueue 任务投递接口，供异步 IO 完成后投递回主循环。
+type TaskQueue interface {
+	Enqueue(fn func())
+}
+
 // Queue 是单主循环场景下的跨 goroutine 任务队列
 //
 // 约定
@@ -27,6 +32,8 @@ func New(size int) *Queue {
 	}
 	return &Queue{ch: make(chan func(), size)}
 }
+
+var _ TaskQueue = (*Queue)(nil)
 
 // Post 投递任务；队列满时阻塞，直到主循环消费出空间
 func (q *Queue) Post(fn func()) {

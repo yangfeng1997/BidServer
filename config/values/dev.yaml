@@ -2,6 +2,9 @@ svr_list:
   - routeragent
   - gatesvr
   - lobbysvr
+  - onlinesvr
+  - matchsvr
+  - roomsvr
 
 gate_listen_tcp: "0.0.0.0:7001"
 gate_listen_ws: "0.0.0.0:7002"
@@ -21,3 +24,5 @@ redis_port_5: 6383
 redis_port_6: 6384
 log_dir: "../log"
 REDIS_PWD: "redisCluster123"
+MONGO_URI: "mongodb://admin:mongoCluster123@tencent.codepeak.cn:27017,tencent.codepeak.cn:27018,tencent.codepeak.cn:27019/?authSource=admin&replicaSet=rs0"
+mongo_database: "admin"

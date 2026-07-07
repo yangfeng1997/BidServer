@@ -21,7 +21,7 @@
 
 ## 快速读法
 
-- `config.py` 负责读取环境值并烘焙运行目录。
+- `config.py` 负责读取环境值并烘焙运行目录，当前 server type 映射支持 gate/lobby/room/match/online/routeragent。
 - `config_bake.py` 负责把模板和环境值渲染成最终配置。
 - `build.py` 负责按环境编译并铺二进制。
 - `gen_proto.sh` 负责编排协议 `.pb.go`、handler / remote / RPC stub 和路由表生成。

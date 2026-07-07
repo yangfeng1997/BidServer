@@ -322,9 +322,9 @@ RouterAgent 之间通过 TCP peer 连接转发跨机 RPC。peer 握手时双方�
 
 每个远端 `listenAddr` 维护 `Disconnected / Connecting / Connected` 状态。只有 `Connected` 且 `Link != nil` 时直接发送，否则入队并按需触发异步建连。
 
-## 与 GameServer 参考实现的关系
+## 与 BidKing2 参考实现的关系
 
-GameServer 的设计文档同样采用 sidecar 模型：
+BidKing2 的设计文档同样采用 sidecar 模型：
 
 - 业务进程通过 UDS 连接本机 RouterAgent。
 - 握手携带 4 字节 `uint32 nodeID`。
@@ -332,7 +332,7 @@ GameServer 的设计文档同样采用 sidecar 模型：
 - 预期由 RouterAgent 代业务节点注册到 etcd。
 - etcd 节点 value 中包含 `node_id/server_type/ra_addr/start_at`。
 
-GameServer 当前源码中服务发现骨架存在，但代业务节点注册到 etcd 尚未完整接入 RouterAgent module。BidServer 应按上述设计补完整链路。
+BidKing2 当前源码中服务发现骨架存在，但代业务节点注册到 etcd 尚未完整接入 RouterAgent module。BidServer 应按上述设计补完整链路。
 
 ## 当前实现状态
 

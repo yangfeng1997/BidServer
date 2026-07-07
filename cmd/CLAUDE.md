@@ -17,18 +17,27 @@
 
 - [`gatesvr/`](gatesvr/)
 - [`lobbysvr/`](lobbysvr/)
+- [`matchsvr/`](matchsvr/)
+- [`onlinesvr/`](onlinesvr/)
+- [`roomsvr/`](roomsvr/)
 - [`routeragent/`](routeragent/)
 
 ## 主要文件
 
 - [`gatesvr/main.go`](gatesvr/main.go)
 - [`lobbysvr/main.go`](lobbysvr/main.go)
+- [`matchsvr/main.go`](matchsvr/main.go)
+- [`onlinesvr/main.go`](onlinesvr/main.go)
+- [`roomsvr/main.go`](roomsvr/main.go)
 - [`routeragent/main.go`](routeragent/main.go)
 
 ## 快速读法
 
 - 查网关启动先看 `cmd/gatesvr/main.go`，再看 `internal/server/gate/`。
 - 查大厅启动先看 `cmd/lobbysvr/main.go`，再看 `internal/server/lobby/`。
+- 查在线服启动先看 `cmd/onlinesvr/main.go`，再看 `internal/server/online/`。
+- 查匹配服启动先看 `cmd/matchsvr/main.go`，再看 `internal/server/match/`。
+- 查房间服启动先看 `cmd/roomsvr/main.go`，再看 `internal/server/room/`。
 - 查路由代理启动先看 `cmd/routeragent/main.go`，再看 `internal/server/routeragent/`。
 
 ## 工作规则

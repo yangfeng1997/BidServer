@@ -1,18 +1,12 @@
 syntax = "proto3";
-
-package conf.schema;
-
-import "conf/schema/types.proto";
+package conf;
+option go_package = "project/conf/schema/gen";
 import "conf/schema/options.proto";
+import "conf/schema/types.proto";
 
-option go_package = "project/conf/schema/gen;gen";
-
-message MatchsvrConfig {
-  MatchConfig match = 1;
-  LogGroupConfig log = 2;
-}
-
-message MatchConfig {
-  string log_level    = 1 [(conf.schema.reload) = true, (conf.schema.enum_values) = "debug,info,warn,error"];
-  int32  match_tick_ms = 2 [(conf.schema.reload) = true];
+message MatchSvr {
+  AppStartup app_startup              = 1;
+  string  node_id           = 2 [(conf.required) = true];
+  string  server_type_name  = 3 [(conf.required) = true];
+  string  addr              = 4 [(conf.required) = true];
 }

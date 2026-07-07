@@ -16,10 +16,9 @@
 ## 子目录
 
 - [`config_build/`](config_build/)
-- [`e2e_full/`](e2e_full/)
 - [`gen_config/`](gen_config/)
 - [`gen_routes/`](gen_routes/)
-- [`protoc-gen-svcstub/`](protoc-gen-svcstub/)
+- [`luban/`](luban/)
 
 ## 主要文件
 

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"text/template"
 )
@@ -55,8 +54,8 @@ type plannedValueFile struct {
 }
 
 type Plan struct {
-	Files       []plannedFile
-	ValueFiles  []plannedValueFile
+	Files      []plannedFile
+	ValueFiles []plannedValueFile
 }
 
 func NewGenerator(cfg GeneratorConfig) (*Generator, error) {
@@ -114,6 +113,9 @@ func (g *Generator) Plan() (*Plan, error) {
 		{path: filepath.Join("internal", "server", g.data.PackageName, "CLAUDE.md"), tmpl: serverClaudeTemplate},
 		{path: filepath.Join("config", "schema", g.data.PackageName+".proto"), tmpl: schemaTemplate},
 		{path: filepath.Join("config", g.data.PackageName+".yaml"), tmpl: configTemplate},
+	}
+	if g.data.ServiceKind == kindStandard {
+		files = append(files, fileSpec{path: filepath.Join("internal", "server", g.data.PackageName, "module.go"), tmpl: serverModuleTemplate})
 	}
 
 	plan := &Plan{}
@@ -330,7 +332,6 @@ func addServiceToSvrList(text, service string) (string, bool, error) {
 		}
 	}
 	items = append(items, service)
-	sort.Strings(items)
 
 	rebuilt := make([]string, 0, len(lines)+2)
 	rebuilt = append(rebuilt, lines[:start]...)

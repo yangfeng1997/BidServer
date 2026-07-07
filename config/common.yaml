@@ -24,3 +24,7 @@ redis:
     - host: "${redis_host}"
       port: ${redis_port_6}
   password: "${REDIS_PWD}"
+
+mongo:
+  uri: "${MONGO_URI}"
+  database: "${mongo_database}"

@@ -16,6 +16,9 @@ func (cfg *CommonConfig) Validate() error {
 	if err := cfg.Redis.Validate(); err != nil {
 		return fmt.Errorf("redis: %w", err)
 	}
+	if err := cfg.Mongo.Validate(); err != nil {
+		return fmt.Errorf("mongo: %w", err)
+	}
 	return nil
 }
 
@@ -71,6 +74,19 @@ func (cfg *RedisNodeConfig) Validate() error {
 	return nil
 }
 
+func (cfg *MongoConfig) Validate() error {
+	if cfg == nil {
+		return fmt.Errorf("config is nil")
+	}
+	if cfg.Uri == "" {
+		return fmt.Errorf("uri is required")
+	}
+	if cfg.Database == "" {
+		return fmt.Errorf("database is required")
+	}
+	return nil
+}
+
 func (cfg *GateConfig) Validate() error {
 	if cfg == nil {
 		return fmt.Errorf("config is nil")
@@ -108,6 +124,54 @@ func (cfg *LobbyConfig) Validate() error {
 	}
 	if cfg.RouteragentSockPath == "" {
 		return fmt.Errorf("routeragent_sock_path is required")
+	}
+	if err := cfg.LoggerGroup.Validate(); err != nil {
+		return fmt.Errorf("logger_group: %w", err)
+	}
+	return nil
+}
+
+func (cfg *MatchConfig) Validate() error {
+	if cfg == nil {
+		return fmt.Errorf("config is nil")
+	}
+	if cfg.RouteragentSockPath == "" {
+		return fmt.Errorf("routeragent_sock_path is required")
+	}
+	if cfg.HeartbeatSec == 0 {
+		return fmt.Errorf("heartbeat_sec is required")
+	}
+	if err := cfg.LoggerGroup.Validate(); err != nil {
+		return fmt.Errorf("logger_group: %w", err)
+	}
+	return nil
+}
+
+func (cfg *OnlineConfig) Validate() error {
+	if cfg == nil {
+		return fmt.Errorf("config is nil")
+	}
+	if cfg.RouteragentSockPath == "" {
+		return fmt.Errorf("routeragent_sock_path is required")
+	}
+	if cfg.HeartbeatSec == 0 {
+		return fmt.Errorf("heartbeat_sec is required")
+	}
+	if err := cfg.LoggerGroup.Validate(); err != nil {
+		return fmt.Errorf("logger_group: %w", err)
+	}
+	return nil
+}
+
+func (cfg *RoomConfig) Validate() error {
+	if cfg == nil {
+		return fmt.Errorf("config is nil")
+	}
+	if cfg.RouteragentSockPath == "" {
+		return fmt.Errorf("routeragent_sock_path is required")
+	}
+	if cfg.HeartbeatSec == 0 {
+		return fmt.Errorf("heartbeat_sec is required")
 	}
 	if err := cfg.LoggerGroup.Validate(); err != nil {
 		return fmt.Errorf("logger_group: %w", err)
@@ -176,4 +240,3 @@ func (cfg *LoggerGroupConfig) Validate() error {
 	}
 	return nil
 }
-

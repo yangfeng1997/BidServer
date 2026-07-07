@@ -27,7 +27,7 @@
 
 **规则**：以下目录默认不读取、不 grep、不遍历，除非用户显式指明。
 
-- `third_projects/`：独立参考项目（`BidKing`、`GameServer`、`ProjectBid`、`cherry`、`pitaya` 等）。仅当用户说"查看参考项目 X"时才进入 `third_projects/X/`。
+- `third_projects/`：独立参考项目（`GameServer`、`BidKing`、`ProjectBid`、`cherry`、`pitaya` 等）。仅当用户说"查看参考项目 X"时才进入 `third_projects/X/`。
 - `docs/TODO/`：临时方案/讨论文档，非正式参考。仅当用户显式要求时才打开。
 
 **Why**：避免把参考项目代码当当前仓库代码处理；避免把临时讨论当既成事实引用。

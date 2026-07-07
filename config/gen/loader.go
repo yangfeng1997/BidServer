@@ -40,6 +40,39 @@ func LoadLobby(path string) (*LobbyConfig, error) {
 	return cfg, nil
 }
 
+func LoadMatch(path string) (*MatchConfig, error) {
+	cfg, err := config.LoadYAML[*MatchConfig](path)
+	if err != nil {
+		return nil, fmt.Errorf("load match config: %w", err)
+	}
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("validate match config: %w", err)
+	}
+	return cfg, nil
+}
+
+func LoadOnline(path string) (*OnlineConfig, error) {
+	cfg, err := config.LoadYAML[*OnlineConfig](path)
+	if err != nil {
+		return nil, fmt.Errorf("load online config: %w", err)
+	}
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("validate online config: %w", err)
+	}
+	return cfg, nil
+}
+
+func LoadRoom(path string) (*RoomConfig, error) {
+	cfg, err := config.LoadYAML[*RoomConfig](path)
+	if err != nil {
+		return nil, fmt.Errorf("load room config: %w", err)
+	}
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("validate room config: %w", err)
+	}
+	return cfg, nil
+}
+
 func LoadRouteragent(path string) (*RouteragentConfig, error) {
 	cfg, err := config.LoadYAML[*RouteragentConfig](path)
 	if err != nil {
@@ -50,4 +83,3 @@ func LoadRouteragent(path string) (*RouteragentConfig, error) {
 	}
 	return cfg, nil
 }
-

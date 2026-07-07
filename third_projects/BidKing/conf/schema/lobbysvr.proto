@@ -1,12 +1,19 @@
 syntax = "proto3";
-package conf;
-option go_package = "project/conf/schema/gen";
+
+package conf.schema;
+
 import "conf/schema/types.proto";
 import "conf/schema/options.proto";
 
-message LobbySvr {
-  AppStartup app_startup             = 1;
-  string  node_id          = 2 [(conf.required) = true];
-  string  server_type_name = 3 [(conf.required) = true];
-  string  addr             = 4 [(conf.required) = true];
+option go_package = "project/conf/schema/gen;gen";
+
+message LobbysvrConfig {
+  LobbyConfig lobby = 1;
+  LogGroupConfig log = 2;
+}
+
+message LobbyConfig {
+  string log_level    = 1 [(conf.schema.reload) = true, (conf.schema.enum_values) = "debug,info,warn,error"];
+  int32  heartbeat_sec = 2 [(conf.schema.reload) = true];
+  int32  max_player    = 3 [(conf.schema.reload) = true];
 }

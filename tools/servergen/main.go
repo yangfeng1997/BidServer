@@ -16,12 +16,12 @@ func main() {
 }
 
 type cliOptions struct {
-	Name         string
-	Pkg          string
-	Kind         string
-	RegisterEnv  string
-	DryRun       bool
-	Force        bool
+	Name        string
+	Pkg         string
+	Kind        string
+	RegisterEnv string
+	DryRun      bool
+	Force       bool
 }
 
 func run(args []string) error {

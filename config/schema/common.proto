@@ -13,6 +13,7 @@ message CommonConfig {
   ClusterConfig cluster = 1;
   EtcdConfig etcd = 2;
   RedisConfig redis = 3;
+  MongoConfig mongo = 4;
 }
 
 message ClusterConfig {
@@ -33,4 +34,9 @@ message RedisConfig {
 message RedisNodeConfig {
   string host = 1 [(config.required) = true];
   int32 port = 2 [(config.required) = true];
+}
+
+message MongoConfig {
+  string uri = 1 [(config.required) = true, (config.env) = true];
+  string database = 2 [(config.required) = true];
 }

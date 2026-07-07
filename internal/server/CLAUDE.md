@@ -15,11 +15,17 @@
 
 - [`gate/`](gate/)
 - [`lobby/`](lobby/)
+- [`match/`](match/)
+- [`online/`](online/)
+- [`room/`](room/)
 - [`routeragent/`](routeragent/)
 
 ## 快速读法
 
 - 网关相关先看 `gate/`。
 - 大厅相关先看 `lobby/`。
+- 在线服相关先看 `online/`。
+- 匹配服相关先看 `match/`。
+- 房间服相关先看 `room/`。
 - 路由代理相关先看 `routeragent/`。
 - 改服务启动时，要同步 `cmd/<svc>/`。

@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package config;
+
+import "config/schema/options.proto";
+import "config/schema/types.proto";
+
+option go_package = "project/config/gen;configgen";
+
+message RoomConfig {
+  option (config.root) = true;
+  option (config.server) = "roomsvr";
+
+  string routeragent_sock_path = 1 [(config.required) = true, (config.env) = true];
+  int32 heartbeat_sec = 2 [(config.required) = true, (config.reload) = true];
+  LoggerGroupConfig logger_group = 3;
+
+}

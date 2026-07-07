@@ -17,7 +17,6 @@
 ## 主要文件
 
 - [`main.go`](main.go)
-- [`main_test.go`](main_test.go)
 
 ## 工作规则
 

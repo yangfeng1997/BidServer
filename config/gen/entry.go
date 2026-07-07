@@ -15,7 +15,18 @@ func NewLobbyConfigEntry(path string) (*config.ConfigEntry[LobbyConfig], error) 
 	return config.NewConfigEntry(path, LoadLobby, CheckLobbyReload)
 }
 
+func NewMatchConfigEntry(path string) (*config.ConfigEntry[MatchConfig], error) {
+	return config.NewConfigEntry(path, LoadMatch, CheckMatchReload)
+}
+
+func NewOnlineConfigEntry(path string) (*config.ConfigEntry[OnlineConfig], error) {
+	return config.NewConfigEntry(path, LoadOnline, CheckOnlineReload)
+}
+
+func NewRoomConfigEntry(path string) (*config.ConfigEntry[RoomConfig], error) {
+	return config.NewConfigEntry(path, LoadRoom, CheckRoomReload)
+}
+
 func NewRouteragentConfigEntry(path string) (*config.ConfigEntry[RouteragentConfig], error) {
 	return config.NewConfigEntry(path, LoadRouteragent, CheckRouteragentReload)
 }
-

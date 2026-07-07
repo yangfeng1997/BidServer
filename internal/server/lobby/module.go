@@ -11,6 +11,8 @@ import (
 	"project/internal/core/ragent/sdk"
 	ragentwire "project/internal/core/ragent/wire"
 	corerpc "project/internal/core/rpc"
+	lobbyinternal "project/internal/server/lobby/internal"
+	"project/pkg/mongo"
 	genhandler "project/protocol/gen/handler"
 )
 
@@ -29,6 +31,8 @@ type Module struct {
 	cfg           *LobbyConfigEntry
 	client        routeragentClient
 	handler       *Handler
+	runtime       *lobbyinternal.Runtime
+	mongoClient   *mongo.Client
 	rpcDispatcher *corerpc.Dispatcher
 	stopOnce      sync.Once
 }
@@ -53,7 +57,17 @@ func (m *Module) Init() error {
 	if !ok {
 		return fmt.Errorf("lobby app does not implement poster")
 	}
+	commonCfg := CommonConfig()
+	if commonCfg == nil {
+		return fmt.Errorf("common config is nil")
+	}
+	mc, err := mongo.Connect(commonCfg.Mongo.Uri, commonCfg.Mongo.Database, 10*time.Second)
+	if err != nil {
+		return fmt.Errorf("connect mongo: %w", err)
+	}
+	m.mongoClient = mc
 	m.handler = NewHandler()
+	m.runtime = newRuntime(m.App().NodeID(), mc)
 	m.rpcDispatcher = corerpc.NewDispatcher()
 	genhandler.RegisterLobbyHandler(m.rpcDispatcher, m.handler)
 	m.client = sdk.NewClient(m.App().NodeIDUint32(), cfg.RouteragentSockPath, poster, m.handleRagentFrame)
@@ -61,8 +75,17 @@ func (m *Module) Init() error {
 }
 
 func (m *Module) AfterInit() error {
+	if m.runtime != nil {
+		m.runtime.Start()
+	}
 	if err := m.client.Connect(); err != nil {
 		m.ready.Fail(err)
+		if m.runtime != nil {
+			m.runtime.Stop()
+		}
+		if m.mongoClient != nil {
+			_ = m.mongoClient.Close()
+		}
 		return err
 	}
 	m.ready.Done()
@@ -75,6 +98,12 @@ func (m *Module) BeforeShutdown() {
 	m.stopOnce.Do(func() {
 		if m.client != nil {
 			_ = m.client.Close()
+		}
+		if m.runtime != nil {
+			m.runtime.Stop()
+		}
+		if m.mongoClient != nil {
+			_ = m.mongoClient.Close()
 		}
 	})
 }
@@ -146,6 +175,15 @@ func NewModuleForTest() *Module {
 	dispatcher := corerpc.NewDispatcher()
 	genhandler.RegisterLobbyHandler(dispatcher, handler)
 	return &Module{ready: app.NewReady(), handler: handler, rpcDispatcher: dispatcher}
+}
+
+func newRuntime(nodeID string, mc *mongo.Client) *lobbyinternal.Runtime {
+	return lobbyinternal.NewRuntime(lobbyinternal.RuntimeConfig{
+		NodeID:       nodeID,
+		Store:        lobbyinternal.NewMongoStore(mc),
+		MailStore:    lobbyinternal.NewMongoMailStore(mc),
+		OfflineStore: lobbyinternal.NewMongoOfflineStore(mc),
+	})
 }
 
 func (m *Module) HandleRagentFrame(frame ragentwire.Frame) {

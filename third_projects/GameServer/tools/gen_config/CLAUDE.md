@@ -16,8 +16,8 @@
 
 ## 主要文件
 
+- [`gen_config_test.go`](gen_config_test.go)
 - [`main.go`](main.go)
-- [`main_test.go`](main_test.go)
 
 ## 工作规则
 

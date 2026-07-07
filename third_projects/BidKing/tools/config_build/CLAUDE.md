@@ -16,7 +16,7 @@
 
 ## 主要文件
 
-- [`build_test.go`](build_test.go)
+- [`config_build_test.go`](config_build_test.go)
 - [`main.go`](main.go)
 
 ## 工作规则

@@ -15,11 +15,18 @@
 
 ## 子目录
 
-- [`common/`](common/)
+- [`envs/`](envs/)
 - [`schema/`](schema/)
-- [`secrets/`](secrets/)
-- [`servers/`](servers/)
-- [`values/`](values/)
+
+## 主要文件
+
+- [`common.yaml`](common.yaml)
+- [`gatesvr.yaml`](gatesvr.yaml)
+- [`lobbysvr.yaml`](lobbysvr.yaml)
+- [`matchsvr.yaml`](matchsvr.yaml)
+- [`onlinesvr.yaml`](onlinesvr.yaml)
+- [`roomsvr.yaml`](roomsvr.yaml)
+- [`routersvr.yaml`](routersvr.yaml)
 
 ## 工作规则
 

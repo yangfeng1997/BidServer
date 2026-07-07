@@ -15,8 +15,8 @@
 
 | 目录 | 类型 | 最快入口 |
 |---|---|---|
-| `BidKing/` | 多服务游戏服务器框架 / 业务骨架 | 先读 `BidKing/CLAUDE.md`，热点优先看 `src/framework/`、`src/common/config/`、`src/common/logger/`、`src/servers/<svc>/` |
-| `GameServer/` | Go 游戏服务器框架骨架 | 先读 `GameServer/CLAUDE.md`，热点优先看 `internal/core/app/`、`internal/core/config/`、`internal/core/log/`、`internal/core/ragent/`、`cmd/<svc>/` |
+| `GameServer/` | 多服务游戏服务器框架 / 业务骨架 | 先读 `GameServer/CLAUDE.md`，热点优先看 `src/framework/`、`src/common/config/`、`src/common/logger/`、`src/servers/<svc>/` |
+| `BidKing/` | Go 游戏服务器框架骨架 | 先读 `BidKing/CLAUDE.md`，热点优先看 `internal/core/app/`、`internal/core/config/`、`internal/core/log/`、`internal/core/ragent/`、`cmd/<svc>/` |
 | `ProjectBid/` | Pitaya 风格游戏服务器框架实验项目 | 先读 `ProjectBid/CLAUDE.md`，热点优先看 `application/`、`service/`、`session/`、`cluster/`、`discovery/`、`config/` |
 | `cherry/` | Actor Model 游戏服务器框架参考 | 先读 `cherry/CLAUDE.md`，热点优先看 `application.go`、`cherry.go`、`facade/`、`net/actor/`、`net/cluster/`、`net/discovery/`、`net/parser/` |
 | `pitaya/` | Pitaya v2 参考项目 | 先读 `pitaya/CLAUDE.md`，热点优先看 `builder.go`、`app.go`、`service/`、`session/`、`cluster/`、`config/`、`acceptor/`、`agent/` |

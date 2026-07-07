@@ -1,54 +1,33 @@
 #!/bin/bash
-set -euo pipefail
-PROTO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$PROTO_DIR"
+# 生成 protobuf 代码
+# 用法: ./tools/gen_proto.sh [proto文件] 或不传参数生成所有
+# 例: ./tools/gen_proto.sh protocal/cluster.proto
+#     ./tools/gen_proto.sh  (生成 protocal/ 下所有 .proto)
 
-echo "=== 1. generating .pb.go files ==="
-protoc --proto_path=. --proto_path=/usr/local/include \
-    --go_out=. --go_opt=paths=source_relative \
-    protocol/common/node.proto \
-    protocol/common/options.proto \
-    protocol/common/errcode.proto \
-    protocol/ra/ra.proto \
-    protocol/cs/lobby_cs.proto \
-    protocol/ss/lobby_ss.proto \
-    protocol/handler/lobby_handler.proto \
-    protocol/handler/room_handler.proto \
-    protocol/handler/match_handler.proto \
-    protocol/handler/online_handler.proto \
-    protocol/service/lobby_service.proto \
-    protocol/service/room_service.proto \
-    protocol/service/match_service.proto \
-    protocol/service/online_service.proto \
-    protocol/service/gate_service.proto
+set -e
 
-echo "=== 2. generating service stubs ==="
-protoc --proto_path=. --proto_path=/usr/local/include \
-    --svcstub_out=protocol/gen --svcstub_opt=paths=source_relative \
-    protocol/handler/lobby_handler.proto \
-    protocol/handler/room_handler.proto \
-    protocol/handler/match_handler.proto \
-    protocol/handler/online_handler.proto \
-    protocol/service/lobby_service.proto \
-    protocol/service/room_service.proto \
-    protocol/service/match_service.proto \
-    protocol/service/online_service.proto \
-    protocol/service/gate_service.proto
+PROTO_DIR="protocal"
+MODULE="project"
 
-echo "=== 3. generating route table ==="
-go run tools/gen_routes/main.go --proto protocol/handler --out protocol/gen/routes.go
+if [ "$#" -gt 0 ]; then
+  # 指定文件
+  for f in "$@"; do
+    echo "generating $f ..."
+    protoc --go_out=. --go_opt=module="$MODULE" "$f"
+  done
+else
+  # 生成所有（跳过 options.proto 依赖顺序问题，先生成 options）
+  echo "generating all protos in $PROTO_DIR/ ..."
+  protoc --go_out=. --go_opt=module="$MODULE" "$PROTO_DIR/options.proto" 2>/dev/null || true
+  for f in "$PROTO_DIR"/*.proto; do
+    [ "$f" = "$PROTO_DIR/options.proto" ] && continue
+    echo "  $f"
+    protoc --go_out=. --go_opt=module="$MODULE" --proto_path=. "$f"
+  done
+fi
 
-echo "=== 4. generating config schema descriptor ==="
-protoc \
-  --proto_path=. \
-  --descriptor_set_out=conf/schema/gen/config.pb.descriptor \
-  --include_imports \
-  conf/schema/*.proto
+# 重新生成路由表
+echo "regenerating route tables ..."
+go run ./tools/gen_routes
 
-echo "=== 5. generating config Go code ==="
-go run tools/gen_config/main.go
-
-echo "=== 6. formatting generated Go files ==="
-gofmt -w protocol/gen/ conf/schema/gen/ 2>/dev/null || true
-
-echo "=== all done ==="
+echo "done."

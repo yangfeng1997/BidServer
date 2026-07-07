@@ -1,444 +1,771 @@
-// gen_config 读取 protoc 输出的 FileDescriptorSet 二进制（.pb），用 protoreflect
-// 遍历配置 message，生成带 yaml: tag 的 Go struct（config.go）+ 三张字段表
-// （reload_table.go：ReloadableFields / EnvFields / RequiredFields）。
-//
-// 设计要点：
-//   - 不依赖 protoc-gen-go 产物（gen_config 正是要生成 config 包，不能导入它）。
-//     option 用原始 extension number（reload=50101 / env=50102 / required=50103），
-//     从 FieldOptions 的 wire bytes 按 field number 解析 bool。
-//   - 特性白名单：仅允许标量（string/int32/int64/uint32/uint64/bool/float/double）
-//   - 嵌套 message + repeated。出现 enum/oneof/map/group/bytes 报错并指出位置。
-//   - env 字段必须是 string，否则报错。
-//   - 三张表均为 map[string]map[string]bool（外层 key=message 名，内层 key=点路径，
-//     如 "common.redis.password"），递归嵌套 message。
-//   - 生成时把每个 message 的静态字段（非 reload）打印到 stderr，供作者自查。
-//
-// 用法：go run ./tools/gen_config --pb=conf/schema/gen/config.pb --out=conf/schema/gen
 package main
 
 import (
-	"bytes"
 	"flag"
 	"fmt"
-	"go/format"
 	"os"
-	"os/exec"
-	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 
+	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protodesc"
-	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
 
-// option extension 的 field number（与 config_options.proto 一致）。
-const (
-	extReload   = 50101
-	extEnv      = 50102
-	extRequired = 50103
-)
+// fieldInfo holds parsed info for one proto field
+type fieldInfo struct {
+	ProtoName   string // snake_case: "listen_tcp"
+	GoName      string // PascalCase: "ListenTcp"
+	GoType      string // e.g. "string", "*GateConfig", "[]string"
+	MessageType string // nested message name if TYPE_MESSAGE, e.g. "GateConfig"
+	Repeated    bool
+	Required    bool
+	Env         bool
+	Reload      bool
+	EnumValues  string
+}
+
+// msgInfo holds parsed info for one proto message
+type msgInfo struct {
+	Name          string      // e.g. "GatesvrConfig"
+	Fields        []fieldInfo
+	SourceFile    string // proto 文件名，e.g. "gatesvr.proto"
+	IsServiceRoot bool   // 是否为服务 proto 的顶层 message（生成 Loader 目标）
+}
 
 func main() {
-	pbPath := flag.String("pb", "conf/schema/gen/config.pb.descriptor", "protoc 输出的 FileDescriptorSet 二进制路径")
-	outDir := flag.String("out", "conf/schema/gen", "生成文件输出目录")
+	var (
+		descriptorFile string
+		outDir         string
+	)
+	flag.StringVar(&descriptorFile, "descriptor", "conf/schema/gen/config.pb.descriptor", "FileDescriptorSet 路径")
+	flag.StringVar(&outDir, "out", "conf/schema/gen", "输出目录")
 	flag.Parse()
 
-	if err := generate(*pbPath, *outDir); err != nil {
-		fmt.Fprintf(os.Stderr, "gen_config 失败: %v\n", err)
+	data, err := os.ReadFile(descriptorFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "read descriptor: %v\n", err)
 		os.Exit(1)
 	}
-}
 
-// runProtoc 调用 protoc（供测试构造 descriptor 用）。
-func runProtoc(args []string) error {
-	cmd := exec.Command("protoc", args...)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("protoc %v: %v\n%s", args, err, out)
-	}
-	return nil
-}
-
-// generate 读 .pb → 解析 FileDescriptorSet → protoreflect 遍历配置 message →
-// 生成 config.go 与 reload_table.go。
-func generate(pbPath, outDir string) error {
-	raw, err := os.ReadFile(pbPath)
-	if err != nil {
-		return fmt.Errorf("读 descriptor %s: %w", pbPath, err)
+	fds := &descriptorpb.FileDescriptorSet{}
+	if err := proto.Unmarshal(data, fds); err != nil {
+		fmt.Fprintf(os.Stderr, "unmarshal descriptor: %v\n", err)
+		os.Exit(1)
 	}
 
-	var fdSet descriptorpb.FileDescriptorSet
-	if err := proto.Unmarshal(raw, &fdSet); err != nil {
-		return fmt.Errorf("解析 FileDescriptorSet: %w", err)
+	msgs, _ := collectMessages(fds)
+	if len(msgs) == 0 {
+		fmt.Fprintln(os.Stderr, "no messages found in descriptor set")
+		os.Exit(1)
 	}
-
-	files, err := protodesc.NewFiles(&fdSet)
-	if err != nil {
-		return fmt.Errorf("构建 FileRegistry: %w", err)
-	}
-
-	// 收集配置 message（跳过 google/ 前缀文件与 config_options.proto；后者只承载 option 扩展定义）。
-	var messages []protoreflect.MessageDescriptor
-	files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
-		p := fd.Path()
-		if strings.HasPrefix(p, "google/") {
-			return true
-		}
-		if path.Base(p) == "options.proto" {
-			return true
-		}
-		mds := fd.Messages()
-		for i := 0; i < mds.Len(); i++ {
-			messages = append(messages, mds.Get(i))
-		}
-		return true
-	})
-
-	// 输出稳定：按 message 名排序。
-	sort.Slice(messages, func(i, j int) bool {
-		return string(messages[i].Name()) < string(messages[j].Name())
-	})
 
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		return fmt.Errorf("创建输出目录 %s: %w", outDir, err)
+		fmt.Fprintf(os.Stderr, "mkdir %s: %v\n", outDir, err)
+		os.Exit(1)
 	}
 
-	structSrc, err := genStructFile(messages)
-	if err != nil {
-		return err
+	configPath := filepath.Join(outDir, "config.go")
+	if err := os.WriteFile(configPath, []byte(renderConfig(msgs)), 0o644); err != nil {
+		fmt.Fprintf(os.Stderr, "write %s: %v\n", configPath, err)
+		os.Exit(1)
 	}
-	if err := os.WriteFile(path.Join(outDir, "config.go"), structSrc, 0o644); err != nil {
-		return fmt.Errorf("写 config.go: %w", err)
+	fmt.Println("generated", configPath)
+
+	validatePath := filepath.Join(outDir, "validate.go")
+	if err := os.WriteFile(validatePath, []byte(renderValidate(msgs)), 0o644); err != nil {
+		fmt.Fprintf(os.Stderr, "write %s: %v\n", validatePath, err)
+		os.Exit(1)
+	}
+	fmt.Println("generated", validatePath)
+
+	diffPath := filepath.Join(outDir, "diff.go")
+	if err := os.WriteFile(diffPath, []byte(renderDiff(msgs)), 0o644); err != nil {
+		fmt.Fprintf(os.Stderr, "write %s: %v\n", diffPath, err)
+		os.Exit(1)
+	}
+	fmt.Println("generated", diffPath)
+
+	// 为每个 service root message 生成 Loader.gen.go
+	loaderCount := renderLoaders(msgs)
+	if loaderCount > 0 {
+		fmt.Printf("generated %d service loaders\n", loaderCount)
 	}
 
-	tableSrc, err := genTableFile(messages)
-	if err != nil {
-		return err
-	}
-	if err := os.WriteFile(path.Join(outDir, "reload_table.go"), tableSrc, 0o644); err != nil {
-		return fmt.Errorf("写 reload_table.go: %w", err)
-	}
-
-	printStaticSummary(messages)
-	return nil
-}
-
-// getBoolExtension 从 FieldOptions 序列化后的 wire bytes 中，按 field number 解析 bool 扩展。
-// 留空与 = false 都返回 false，= true 返回 true。
-func getBoolExtension(opts *descriptorpb.FieldOptions, fieldNum int32) (bool, error) {
-	if opts == nil {
-		return false, nil
-	}
-	b, err := proto.Marshal(opts)
-	if err != nil {
-		return false, fmt.Errorf("序列化 FieldOptions: %w", err)
-	}
-	for len(b) > 0 {
-		num, typ, n := consumeTag(b)
-		if n <= 0 {
-			return false, fmt.Errorf("FieldOptions wire 解析失败")
-		}
-		b = b[n:]
-		if num == fieldNum && typ == 0 { // varint，bool
-			v, m := consumeVarint(b)
-			if m <= 0 {
-				return false, fmt.Errorf("FieldOptions varint 解析失败")
-			}
-			return v != 0, nil
-		}
-		// 非目标 field：跳过该值。
-		skip, err := skipValue(b, typ)
-		if err != nil {
-			return false, err
-		}
-		b = b[skip:]
-	}
-	return false, nil
-}
-
-// consumeTag 解析一个 wire tag，返回 field number、wire type、消耗字节数。
-func consumeTag(b []byte) (num int32, typ int, n int) {
-	v, m := consumeVarint(b)
-	if m <= 0 {
-		return 0, 0, 0
-	}
-	return int32(v >> 3), int(v & 0x7), m
-}
-
-// consumeVarint 解析一个 varint，返回值与消耗字节数（失败返回 0,0）。
-func consumeVarint(b []byte) (uint64, int) {
-	var v uint64
-	for i := 0; i < len(b); i++ {
-		v |= uint64(b[i]&0x7f) << (7 * uint(i))
-		if b[i]&0x80 == 0 {
-			return v, i + 1
-		}
-		if i >= 9 {
-			return 0, 0
-		}
-	}
-	return 0, 0
-}
-
-// skipValue 跳过给定 wire type 的一个值，返回消耗字节数。
-func skipValue(b []byte, typ int) (int, error) {
-	switch typ {
-	case 0: // varint
-		_, m := consumeVarint(b)
-		if m <= 0 {
-			return 0, fmt.Errorf("跳过 varint 失败")
-		}
-		return m, nil
-	case 1: // 64-bit
-		if len(b) < 8 {
-			return 0, fmt.Errorf("跳过 64-bit 失败")
-		}
-		return 8, nil
-	case 2: // length-delimited
-		l, m := consumeVarint(b)
-		if m <= 0 {
-			return 0, fmt.Errorf("跳过 length-delimited 长度失败")
-		}
-		if len(b) < m+int(l) {
-			return 0, fmt.Errorf("跳过 length-delimited 内容越界")
-		}
-		return m + int(l), nil
-	case 5: // 32-bit
-		if len(b) < 4 {
-			return 0, fmt.Errorf("跳过 32-bit 失败")
-		}
-		return 4, nil
-	default:
-		return 0, fmt.Errorf("不支持的 wire type %d", typ)
+	// 为 CommonConfig 生成 Loader（不热更，精简版）
+	if renderCommonLoader(msgs) {
+		fmt.Println("generated common loader")
 	}
 }
 
-// kindAllowed 检查字段类型是否在白名单内（标量 + 嵌套 message）。
-// repeated 由调用方在外层处理；map/group/oneof/enum/bytes 一律拒绝。
-func kindAllowed(fd protoreflect.FieldDescriptor) bool {
-	switch fd.Kind() {
-	case protoreflect.StringKind,
-		protoreflect.Int32Kind, protoreflect.Int64Kind,
-		protoreflect.Uint32Kind, protoreflect.Uint64Kind,
-		protoreflect.BoolKind,
-		protoreflect.FloatKind, protoreflect.DoubleKind:
+// collectMessages 从 FileDescriptorSet 递归收集所有 message（含嵌套），去重后返回
+func collectMessages(fds *descriptorpb.FileDescriptorSet) (msgs []msgInfo, serviceRoots map[string]bool) {
+	isCommon := map[string]bool{}
+	serviceRoots = map[string]bool{}
+	var allMsgs []msgInfo
+
+	// 识别服务 proto：非 common/types/options/google 的 .proto 文件
+	isServiceProto := func(fn string) bool {
+		if strings.HasPrefix(fn, "google/protobuf/") {
+			return false
+		}
+		base := filepath.Base(fn)
+		switch base {
+		case "options.proto", "common.proto", "types.proto":
+			return false
+		}
 		return true
-	case protoreflect.MessageKind:
-		// map 在 protoreflect 里也是 MessageKind（IsMap），需排除。
-		return !fd.IsMap()
-	default:
-		// EnumKind / BytesKind / GroupKind / Sint*/Fixed* 等一律不在白名单。
-		return false
 	}
-}
 
-// scalarGoType 返回标量字段对应的 Go 类型名。
-func scalarGoType(fd protoreflect.FieldDescriptor) string {
-	switch fd.Kind() {
-	case protoreflect.StringKind:
-		return "string"
-	case protoreflect.Int32Kind:
-		return "int32"
-	case protoreflect.Int64Kind:
-		return "int64"
-	case protoreflect.Uint32Kind:
-		return "uint32"
-	case protoreflect.Uint64Kind:
-		return "uint64"
-	case protoreflect.BoolKind:
-		return "bool"
-	case protoreflect.FloatKind:
-		return "float32"
-	case protoreflect.DoubleKind:
-		return "float64"
-	default:
-		return ""
-	}
-}
-
-// goType 返回字段对应的 Go 类型（含 repeated 的 [] 与嵌套 message 的 *TypeName）。
-func goType(fd protoreflect.FieldDescriptor) string {
-	var base string
-	if fd.Kind() == protoreflect.MessageKind {
-		base = "*" + string(fd.Message().Name())
-	} else {
-		base = scalarGoType(fd)
-	}
-	if fd.Cardinality() == protoreflect.Repeated {
-		// repeated message 用 []*TypeName；repeated 标量用 []T。
-		return "[]" + base
-	}
-	return base
-}
-
-// toCamel 把 snake_case 转 CamelCase（首字母大写，导出字段）。
-func toCamel(s string) string {
-	parts := strings.Split(s, "_")
-	var b strings.Builder
-	for _, p := range parts {
-		if p == "" {
+	for _, file := range fds.GetFile() {
+		fn := file.GetName()
+		if strings.HasPrefix(fn, "google/protobuf/") || strings.HasSuffix(fn, "options.proto") {
 			continue
 		}
-		b.WriteString(strings.ToUpper(p[:1]))
-		b.WriteString(p[1:])
+		isCommonFile := strings.HasSuffix(fn, "common.proto") || filepath.Base(fn) == "common.proto"
+		if msgs := file.GetMessageType(); len(msgs) > 0 && isServiceProto(fn) {
+			// 服务 proto 的顶层 message 是 service root
+			serviceRoots[msgs[0].GetName()] = true
+		}
+		for _, msg := range file.GetMessageType() {
+			collectRecursive(msg, fn, isCommonFile, &allMsgs)
+		}
+	}
+
+	// 去重：按 message Name 去重（首个出现保留其 SourceFile）
+	seen := map[string]bool{}
+	for _, mi := range allMsgs {
+		if seen[mi.Name] {
+			continue
+		}
+		seen[mi.Name] = true
+		// 标记 service root
+		if serviceRoots[mi.Name] {
+			mi.IsServiceRoot = true
+		}
+		msgs = append(msgs, mi)
+	}
+
+	// 稳定排序：common.proto 的 message 在前
+	sort.Slice(msgs, func(i, j int) bool {
+		iCommon := isCommon[msgs[i].Name]
+		jCommon := isCommon[msgs[j].Name]
+		if iCommon != jCommon {
+			return iCommon
+		}
+		return msgs[i].Name < msgs[j].Name
+	})
+
+	return
+}
+
+// collectRecursive 递归收集 message 及其嵌套 message
+func collectRecursive(msg *descriptorpb.DescriptorProto, sourceFile string, commonFile bool, out *[]msgInfo) {
+	mi := parseMessage(msg)
+	mi.SourceFile = sourceFile
+	*out = append(*out, mi)
+
+	for _, nested := range msg.GetNestedType() {
+		collectRecursive(nested, sourceFile, commonFile, out)
+	}
+}
+
+// parseMessage 从 MessageDescriptorProto 解析 message 信息
+func parseMessage(msg *descriptorpb.DescriptorProto) msgInfo {
+	mi := msgInfo{Name: msg.GetName()}
+	for _, field := range msg.GetField() {
+		fi := parseField(field)
+		mi.Fields = append(mi.Fields, fi)
+	}
+	return mi
+}
+
+// parseField 从 FieldDescriptorProto 解析字段信息
+func parseField(field *descriptorpb.FieldDescriptorProto) fieldInfo {
+	protoName := field.GetName()
+	goName := snakeToPascal(protoName)
+
+	repeated := field.GetLabel() == descriptorpb.FieldDescriptorProto_LABEL_REPEATED
+	reload, required, env, enumValues := false, false, false, ""
+
+	if opts := field.GetOptions(); opts != nil {
+		raw, err := proto.Marshal(opts)
+		if err == nil {
+			reload, required, env, enumValues = parseCustomOptions(raw)
+		}
+	}
+
+	// 校验：env=true 只能用于 string 字段
+	if env && field.GetType() != descriptorpb.FieldDescriptorProto_TYPE_STRING {
+		fmt.Fprintf(os.Stderr, "ERROR: field %q: env=true requires string type, got %v\n",
+			protoName, field.GetType())
+		os.Exit(1)
+	}
+
+	goType, msgType := protoTypeToGo(field.GetType(), repeated, field.GetTypeName())
+
+	return fieldInfo{
+		ProtoName:   protoName,
+		GoName:      goName,
+		GoType:      goType,
+		MessageType: msgType,
+		Repeated:    repeated,
+		Required:    required,
+		Env:         env,
+		Reload:      reload,
+		EnumValues:  enumValues,
+	}
+}
+
+// parseCustomOptions 从序列化的 FieldOptions bytes 中提取自定义 option（50005-50008）
+func parseCustomOptions(raw []byte) (reload, required, env bool, enumValues string) {
+	for len(raw) > 0 {
+		num, typ, n := protowire.ConsumeTag(raw)
+		if n < 0 {
+			break
+		}
+		raw = raw[n:]
+		switch num {
+		case 50005: // reload (bool)
+			v, n := protowire.ConsumeVarint(raw)
+			if n >= 0 {
+				reload = v != 0
+				raw = raw[n:]
+			}
+		case 50006: // required (bool)
+			v, n := protowire.ConsumeVarint(raw)
+			if n >= 0 {
+				required = v != 0
+				raw = raw[n:]
+			}
+		case 50007: // env (bool)
+			v, n := protowire.ConsumeVarint(raw)
+			if n >= 0 {
+				env = v != 0
+				raw = raw[n:]
+			}
+		case 50008: // enum_values (string)
+			b, n := protowire.ConsumeBytes(raw)
+			if n >= 0 {
+				enumValues = string(b)
+				raw = raw[n:]
+			}
+		default:
+			n = protowire.ConsumeFieldValue(num, typ, raw)
+			if n < 0 {
+				return
+			}
+			raw = raw[n:]
+		}
+	}
+	return
+}
+
+// protoTypeToGo 将 proto 字段类型映射为 Go 类型
+func protoTypeToGo(pt descriptorpb.FieldDescriptorProto_Type, repeated bool, typeName string) (goType, msgType string) {
+	var scalar string
+	switch pt {
+	case descriptorpb.FieldDescriptorProto_TYPE_BOOL:
+		scalar = "bool"
+	case descriptorpb.FieldDescriptorProto_TYPE_INT32, descriptorpb.FieldDescriptorProto_TYPE_SINT32, descriptorpb.FieldDescriptorProto_TYPE_SFIXED32:
+		scalar = "int32"
+	case descriptorpb.FieldDescriptorProto_TYPE_INT64, descriptorpb.FieldDescriptorProto_TYPE_SINT64, descriptorpb.FieldDescriptorProto_TYPE_SFIXED64:
+		scalar = "int64"
+	case descriptorpb.FieldDescriptorProto_TYPE_UINT32, descriptorpb.FieldDescriptorProto_TYPE_FIXED32:
+		scalar = "uint32"
+	case descriptorpb.FieldDescriptorProto_TYPE_UINT64, descriptorpb.FieldDescriptorProto_TYPE_FIXED64:
+		scalar = "uint64"
+	case descriptorpb.FieldDescriptorProto_TYPE_FLOAT:
+		scalar = "float32"
+	case descriptorpb.FieldDescriptorProto_TYPE_DOUBLE:
+		scalar = "float64"
+	case descriptorpb.FieldDescriptorProto_TYPE_STRING:
+		scalar = "string"
+	case descriptorpb.FieldDescriptorProto_TYPE_BYTES:
+		scalar = "[]byte"
+	case descriptorpb.FieldDescriptorProto_TYPE_ENUM:
+		// proto enum: extract type name for alias, default to int32
+		scalar = "int32"
+		if typeName != "" {
+			if idx := strings.LastIndex(typeName, "."); idx >= 0 {
+				scalar = strings.ToLower(typeName[idx+1:]) // enum type name as comment-hint
+			}
+		}
+	case descriptorpb.FieldDescriptorProto_TYPE_MESSAGE:
+		msgType = typeName
+		if idx := strings.LastIndex(msgType, "."); idx >= 0 {
+			msgType = msgType[idx+1:]
+		}
+		if repeated {
+			goType = "[]*" + msgType
+		} else {
+			goType = "*" + msgType
+		}
+		return
+	default:
+		scalar = "int32"
+	}
+	if repeated {
+		goType = "[]" + scalar
+	} else {
+		goType = scalar
+	}
+	return
+}
+
+// snakeToPascal 将 snake_case 转为 PascalCase
+func snakeToPascal(s string) string {
+	parts := strings.Split(s, "_")
+	for i, p := range parts {
+		if len(p) > 0 {
+			parts[i] = strings.ToUpper(p[:1]) + p[1:]
+		}
+	}
+	return strings.Join(parts, "")
+}
+
+// ── 代码生成 ──
+
+func renderValidate(msgs []msgInfo) string {
+	var b strings.Builder
+	b.WriteString("// Code generated by gen_config. DO NOT EDIT.\n")
+	b.WriteString("package gen\n\n")
+	b.WriteString("import (\n\t\"fmt\"\n\t\"strings\"\n)\n\n")
+
+	// prefixAll helper
+	b.WriteString("func prefixAll(errs []string, p string) []string {\n")
+	b.WriteString("\tfor i := range errs {\n")
+	b.WriteString("\t\terrs[i] = p + errs[i]\n")
+	b.WriteString("\t}\n")
+	b.WriteString("\treturn errs\n")
+	b.WriteString("}\n\n")
+
+	for _, msg := range msgs {
+		renderValidateMethod(&b, msg)
 	}
 	return b.String()
 }
 
-// genStructFile 为每个 message 生成带 yaml: tag 的 struct。
-// 遇白名单外类型或 env 非 string 报错，最后用 go/format 格式化。
-func genStructFile(messages []protoreflect.MessageDescriptor) ([]byte, error) {
-	var buf bytes.Buffer
-	buf.WriteString("// Code generated by gen_config. DO NOT EDIT.\n")
-	buf.WriteString("// 由 tools/gen_config 从 conf/schema/*.proto 的 descriptor 生成。\n\n")
-	buf.WriteString("package conf\n\n")
+func renderValidateMethod(b *strings.Builder, msg msgInfo) {
+	b.WriteString("func (c *")
+	b.WriteString(msg.Name)
+	b.WriteString(") Validate() []string {\n")
+	b.WriteString("\tvar errs []string\n")
+	b.WriteString("\tif c == nil { return []string{\"<nil>\"} }\n")
 
-	for _, md := range messages {
-		buf.WriteString(fmt.Sprintf("// %s 由 proto message %s 生成。\n", md.Name(), md.FullName()))
-		buf.WriteString(fmt.Sprintf("type %s struct {\n", md.Name()))
-		fields := md.Fields()
-		for i := 0; i < fields.Len(); i++ {
-			fd := fields.Get(i)
-			if fd.ContainingOneof() != nil {
-				return nil, fmt.Errorf("不支持的特性 oneof：%s 字段 %s", md.FullName(), fd.Name())
+	for _, f := range msg.Fields {
+		isMsg := f.MessageType != "" && !f.Repeated
+		isRepeatedMsg := f.MessageType != "" && f.Repeated
+
+		if isMsg {
+			// 嵌套 message 字段（*SubType）
+			b.WriteString("\tif c.")
+			b.WriteString(f.GoName)
+			b.WriteString(" != nil {\n")
+			b.WriteString("\t\terrs = append(errs, prefixAll(c.")
+			b.WriteString(f.GoName)
+			b.WriteString(".Validate(), \"")
+			b.WriteString(f.ProtoName)
+			b.WriteString(".\")...)\n")
+			b.WriteString("\t}\n")
+			if f.Required {
+				b.WriteString("\tif c.")
+				b.WriteString(f.GoName)
+				b.WriteString(" == nil { errs = append(errs, \"")
+				b.WriteString(f.ProtoName)
+				b.WriteString(" is required\") }\n")
 			}
-			if !kindAllowed(fd) {
-				return nil, fmt.Errorf("不支持的字段类型 %s（白名单外，疑似 enum/map/bytes/group）：%s 字段 %s",
-					fd.Kind(), md.FullName(), fd.Name())
+		} else if isRepeatedMsg {
+			// 嵌套 message 切片（[]*SubType）：逐个校验，整体 required
+			if f.Required {
+				b.WriteString("\tif len(c.")
+				b.WriteString(f.GoName)
+				b.WriteString(") == 0 { errs = append(errs, \"")
+				b.WriteString(f.ProtoName)
+				b.WriteString(" is required\") }\n")
 			}
-			// env 字段必须是 string。
-			opts, _ := fd.Options().(*descriptorpb.FieldOptions)
-			isEnv, err := getBoolExtension(opts, extEnv)
-			if err != nil {
-				return nil, fmt.Errorf("%s 字段 %s 读 env option: %w", md.FullName(), fd.Name(), err)
+		} else {
+			// 标量或标量切片
+			isSlice := f.Repeated
+			zeroCheck := zeroExpr(f.GoName, f.GoType, isSlice)
+			if f.Required && zeroCheck != "" {
+				b.WriteString("\tif ")
+				b.WriteString(zeroCheck)
+				b.WriteString(" { errs = append(errs, \"")
+				b.WriteString(f.ProtoName)
+				b.WriteString(" is required\") }\n")
 			}
-			if isEnv && fd.Kind() != protoreflect.StringKind {
-				return nil, fmt.Errorf("env 字段必须是 string 类型：%s 字段 %s（实际 %s）",
-					md.FullName(), fd.Name(), fd.Kind())
+
+			// enum 检查（仅 string 标量字段）
+			if f.EnumValues != "" && f.GoType == "string" {
+				vals := parseEnumValues(f.EnumValues)
+				b.WriteString("\tif c.")
+				b.WriteString(f.GoName)
+				b.WriteString(` != ""`)
+				// 值不在列表 → 报错
+				b.WriteString(" {\n")
+				b.WriteString("\t\tswitch c.")
+				b.WriteString(f.GoName)
+				b.WriteString(" {\n")
+				b.WriteString("\t\tcase ")
+				for i, v := range vals {
+					if i > 0 {
+						b.WriteString(", ")
+					}
+					b.WriteString(fmt.Sprintf("%q", v))
+				}
+				b.WriteString(":\n")
+				b.WriteString("\t\tdefault:\n")
+				b.WriteString("\t\t\terrs = append(errs, fmt.Sprintf(\"")
+				b.WriteString(f.ProtoName)
+				b.WriteString("=%q not in [")
+				for i, v := range vals {
+					if i > 0 {
+						b.WriteString(" ")
+					}
+					b.WriteString(v)
+				}
+				b.WriteString("]\", c.")
+				b.WriteString(f.GoName)
+				b.WriteString("))\n")
+				b.WriteString("\t\t}\n")
+				b.WriteString("\t}\n")
 			}
-			name := string(fd.Name())
-			buf.WriteString(fmt.Sprintf("\t%s %s `yaml:%q`\n", toCamel(name), goType(fd), name))
+			// env 检查：字段标记 env=true 时，值不得残留 ${...} 占位符
+			if f.Env && f.GoType == "string" {
+				b.WriteString("\tif c.")
+				b.WriteString(f.GoName)
+				b.WriteString(` != "" && strings.Contains(c.`)
+				b.WriteString(f.GoName)
+				b.WriteString(`, "${") { errs = append(errs, "`)
+				b.WriteString(f.ProtoName)
+				b.WriteString(` env var not injected: "+c.`)
+				b.WriteString(f.GoName)
+				b.WriteString(") }\n")
+			}
 		}
-		buf.WriteString("}\n\n")
 	}
 
-	src, err := format.Source(buf.Bytes())
-	if err != nil {
-		return nil, fmt.Errorf("格式化 config.go: %w\n源码:\n%s", err, buf.String())
-	}
-	return src, nil
+	b.WriteString("\treturn errs\n}\n\n")
 }
 
-// collectPaths 递归收集满足 filter 的字段点路径到 out。
-// prefix 是当前 message 在顶层 message 内的点路径前缀（顶层为空）。
-func collectPaths(md protoreflect.MessageDescriptor, prefix string, filter func(protoreflect.FieldDescriptor) (bool, error), out map[string]bool) error {
-	fields := md.Fields()
-	for i := 0; i < fields.Len(); i++ {
-		fd := fields.Get(i)
-		name := string(fd.Name())
-		full := name
-		if prefix != "" {
-			full = prefix + "." + name
-		}
-		ok, err := filter(fd)
-		if err != nil {
-			return err
-		}
-		if ok {
-			out[full] = true
-		}
-		// 递归进入嵌套 message（非 repeated；repeated message 的内部路径无单一点路径语义，跳过）。
-		if fd.Kind() == protoreflect.MessageKind && !fd.IsMap() && fd.Cardinality() != protoreflect.Repeated {
-			if err := collectPaths(fd.Message(), full, filter, out); err != nil {
-				return err
-			}
-		}
+func zeroExpr(goName, goType string, isSlice bool) string {
+	if isSlice {
+		return fmt.Sprintf("len(c.%s) == 0", goName)
 	}
-	return nil
+	switch goType {
+	case "string":
+		return fmt.Sprintf("c.%s == \"\"", goName)
+	case "int32", "int64", "uint32", "uint64", "int", "float32", "float64":
+		return fmt.Sprintf("c.%s == 0", goName)
+	}
+	// bool / []byte 等：不生成 required 检查（bool false 有意为之）
+	return ""
 }
 
-// boolExtFilter 返回一个按指定 extension number 取 bool 的 filter。
-func boolExtFilter(fieldNum int32) func(protoreflect.FieldDescriptor) (bool, error) {
-	return func(fd protoreflect.FieldDescriptor) (bool, error) {
-		opts, _ := fd.Options().(*descriptorpb.FieldOptions)
-		return getBoolExtension(opts, fieldNum)
+func parseEnumValues(s string) []string {
+	parts := strings.Split(s, ",")
+	var vals []string
+	for _, p := range parts {
+		vals = append(vals, strings.TrimSpace(p))
 	}
+	return vals
 }
 
-// genTableFile 生成 ReloadableFields / EnvFields / RequiredFields 三张表。
-func genTableFile(messages []protoreflect.MessageDescriptor) ([]byte, error) {
-	var buf bytes.Buffer
-	buf.WriteString("// Code generated by gen_config. DO NOT EDIT.\n")
-	buf.WriteString("// 由 tools/gen_config 从 conf/schema/*.proto 的 descriptor 生成。\n\n")
-	buf.WriteString("package conf\n\n")
+func renderDiff(msgs []msgInfo) string {
+	var b strings.Builder
+	b.WriteString("// Code generated by gen_config. DO NOT EDIT.\n")
+	b.WriteString("package gen\n\n")
+	b.WriteString("import \"reflect\"\n\n")
 
-	type table struct {
-		varName string
-		comment string
-		ext     int32
+	for _, msg := range msgs {
+		renderCheckStatic(&b, msg)
 	}
-	tables := []table{
-		{"ReloadableFields", "ReloadableFields 配置 message 名 → 可热更字段路径集（标 reload=true）。", extReload},
-		{"EnvFields", "EnvFields 运行时 ${VAR} 注入字段路径集（标 env=true）。", extEnv},
-		{"RequiredFields", "RequiredFields 必填字段路径集（标 required=true）。", extRequired},
-	}
+	return b.String()
+}
 
-	for _, tb := range tables {
-		buf.WriteString(fmt.Sprintf("// %s\n", tb.comment))
-		buf.WriteString(fmt.Sprintf("var %s = map[string]map[string]bool{\n", tb.varName))
-		for _, md := range messages {
-			paths := map[string]bool{}
-			if err := collectPaths(md, "", boolExtFilter(tb.ext), paths); err != nil {
-				return nil, fmt.Errorf("收集 %s 的 %s 路径: %w", md.Name(), tb.varName, err)
-			}
-			if len(paths) == 0 {
-				continue
-			}
-			sorted := make([]string, 0, len(paths))
-			for p := range paths {
-				sorted = append(sorted, p)
-			}
-			sort.Strings(sorted)
-			buf.WriteString(fmt.Sprintf("\t%q: {\n", string(md.Name())))
-			for _, p := range sorted {
-				buf.WriteString(fmt.Sprintf("\t\t%q: true,\n", p))
-			}
-			buf.WriteString("\t},\n")
+func renderCheckStatic(b *strings.Builder, msg msgInfo) {
+	b.WriteString("func (c *")
+	b.WriteString(msg.Name)
+	b.WriteString(") CheckStatic(old *")
+	b.WriteString(msg.Name)
+	b.WriteString(") []string {\n")
+	b.WriteString("\tvar stale []string\n")
+	b.WriteString("\tif old == nil || c == nil { return []string{\"<nil>\"} }\n")
+
+	for _, f := range msg.Fields {
+		if f.Reload {
+			continue // reload 字段允许热更，跳过
 		}
-		buf.WriteString("}\n\n")
+		isMsg := f.MessageType != "" && !f.Repeated
+		isRepeatedMsg := f.MessageType != "" && f.Repeated
+
+		if isMsg {
+			// 嵌套 message 字段（*SubType）：递归，加前缀；nil 时处理为整体变更
+			b.WriteString("\tif c.")
+			b.WriteString(f.GoName)
+			b.WriteString(" != nil && old.")
+			b.WriteString(f.GoName)
+			b.WriteString(" != nil {\n")
+			b.WriteString("\t\tstale = append(stale, prefixAll(c.")
+			b.WriteString(f.GoName)
+			b.WriteString(".CheckStatic(old.")
+			b.WriteString(f.GoName)
+			b.WriteString("), \"")
+			b.WriteString(f.ProtoName)
+			b.WriteString(".\")...)\n")
+			b.WriteString("\t} else if c.")
+			b.WriteString(f.GoName)
+			b.WriteString(" != old.")
+			b.WriteString(f.GoName)
+			b.WriteString(" {\n")
+			b.WriteString("\t\tstale = append(stale, \"")
+			b.WriteString(f.ProtoName)
+			b.WriteString("\")\n")
+			b.WriteString("\t}\n")
+		} else if isRepeatedMsg {
+			// 嵌套 message 切片（[]*SubType）：DeepEqual 整体比较
+			b.WriteString("\tif !reflect.DeepEqual(c.")
+			b.WriteString(f.GoName)
+			b.WriteString(", old.")
+			b.WriteString(f.GoName)
+			b.WriteString(") { stale = append(stale, \"")
+			b.WriteString(f.ProtoName)
+			b.WriteString("\") }\n")
+		} else if f.Repeated {
+			// 标量切片：DeepEqual 比较
+			b.WriteString("\tif !reflect.DeepEqual(c.")
+			b.WriteString(f.GoName)
+			b.WriteString(", old.")
+			b.WriteString(f.GoName)
+			b.WriteString(") { stale = append(stale, \"")
+			b.WriteString(f.ProtoName)
+			b.WriteString("\") }\n")
+		} else {
+			// 标量字段：直接 != 比较
+			b.WriteString("\tif c.")
+			b.WriteString(f.GoName)
+			b.WriteString(" != old.")
+			b.WriteString(f.GoName)
+			b.WriteString(" { stale = append(stale, \"")
+			b.WriteString(f.ProtoName)
+			b.WriteString("\") }\n")
+		}
 	}
 
-	src, err := format.Source(buf.Bytes())
-	if err != nil {
-		return nil, fmt.Errorf("格式化 reload_table.go: %w\n源码:\n%s", err, buf.String())
-	}
-	return src, nil
+	b.WriteString("\treturn stale\n}\n\n")
 }
 
-// printStaticSummary 把每个 message 的静态字段（非 reload）打印到 stderr，供作者自查。
-func printStaticSummary(messages []protoreflect.MessageDescriptor) {
-	fmt.Fprintln(os.Stderr, "=== gen_config 静态字段自查清单（非 reload 字段，确认是否有本想热更却漏标的）===")
-	for _, md := range messages {
-		static := map[string]bool{}
-		_ = collectPaths(md, "", func(fd protoreflect.FieldDescriptor) (bool, error) {
-			// 只收集标量与 repeated 标量这类「叶子」字段；嵌套 message 本身不算叶子。
-			if fd.Kind() == protoreflect.MessageKind && fd.Cardinality() != protoreflect.Repeated {
-				return false, nil
-			}
-			opts, _ := fd.Options().(*descriptorpb.FieldOptions)
-			isReload, _ := getBoolExtension(opts, extReload)
-			return !isReload, nil
-		}, static)
-		if len(static) == 0 {
+func renderConfig(msgs []msgInfo) string {
+	var b strings.Builder
+	b.WriteString("// Code generated by gen_config. DO NOT EDIT.\n")
+	b.WriteString("package gen\n\n")
+
+	for _, msg := range msgs {
+		renderStruct(&b, msg)
+	}
+	return b.String()
+}
+
+func renderStruct(b *strings.Builder, msg msgInfo) {
+	b.WriteString("// ")
+	b.WriteString(msg.Name)
+	b.WriteString(" 配置结构\n")
+	b.WriteString("type ")
+	b.WriteString(msg.Name)
+	b.WriteString(" struct {\n")
+	for _, f := range msg.Fields {
+		b.WriteString("\t")
+		b.WriteString(f.GoName)
+		b.WriteString(" ")
+		b.WriteString(f.GoType)
+		b.WriteString(" `yaml:\"")
+		b.WriteString(f.ProtoName)
+		b.WriteString("\"`\n")
+	}
+	b.WriteString("}\n\n")
+}
+
+// renderLoaders 为每个 service root message 生成 typed Loader 到 conf/schema/gen/loader/
+func renderLoaders(msgs []msgInfo) int {
+	dir := filepath.Join("conf", "schema", "gen", "loader")
+	os.MkdirAll(dir, 0o755)
+	count := 0
+	for _, msg := range msgs {
+		if !msg.IsServiceRoot {
 			continue
 		}
-		sorted := make([]string, 0, len(static))
-		for p := range static {
-			sorted = append(sorted, p)
+		configType := msg.Name                       // "GatesvrConfig"
+		prefix := strings.TrimSuffix(configType, "Config")   // "Gatesvr"
+		svcName := svcNameFromProto(msg.SourceFile)           // "gatesvr"
+
+		var b strings.Builder
+		b.WriteString("// Code generated by gen_config. DO NOT EDIT.\n")
+		b.WriteString("package config\n\n")
+
+		b.WriteString("import (\n")
+		b.WriteString("\t\"fmt\"\n")
+		b.WriteString("\t\"os\"\n")
+		b.WriteString("\t\"sync/atomic\"\n\n")
+		b.WriteString("\t\"gopkg.in/yaml.v3\"\n\n")
+		b.WriteString("\t\"project/conf/schema/gen\"\n")
+		b.WriteString("\tconfig \"project/internal/core/config\"\n")
+		b.WriteString("\t\"project/pkg/configgen\"\n")
+		b.WriteString(")\n\n")
+
+		// Loader struct
+		b.WriteString("type ")
+		b.WriteString(prefix)
+		b.WriteString("Loader struct {\n")
+		b.WriteString("\tfiles  []string\n")
+		b.WriteString("\tshadow *gen.")
+		b.WriteString(configType)
+		b.WriteString("\n")
+		b.WriteString("\tcur    atomic.Pointer[gen.")
+		b.WriteString(configType)
+		b.WriteString("]\n")
+		b.WriteString("}\n\n")
+
+		// singleton
+		b.WriteString("var ")
+		b.WriteString(svcName)
+		b.WriteString(" *")
+		b.WriteString(prefix)
+		b.WriteString("Loader\n\n")
+
+		// Register
+		b.WriteString("func Register")
+		b.WriteString(prefix)
+		b.WriteString("(allFiles []string) {\n")
+		b.WriteString("\t_, svc := config.SplitFiles(allFiles)\n")
+		b.WriteString("\tl := &")
+		b.WriteString(prefix)
+		b.WriteString("Loader{files: svc}\n")
+		b.WriteString("\t")
+		b.WriteString(svcName)
+		b.WriteString(" = l\n")
+		b.WriteString("\tconfig.RegisterService(l)\n")
+		b.WriteString("}\n\n")
+
+		// Load methods
+		b.WriteString("func (l *")
+		b.WriteString(prefix)
+		b.WriteString("Loader) Load() error {\n")
+		b.WriteString("\tcfg := new(gen.")
+		b.WriteString(configType)
+		b.WriteString(")\n")
+		b.WriteString("\tfor _, f := range l.files {\n")
+		b.WriteString("\t\tdata, err := os.ReadFile(f)\n")
+		b.WriteString("\t\tif err != nil { return fmt.Errorf(\"read %s: %w\", f, err) }\n")
+		b.WriteString("\t\tdata, err = configgen.ExpandUpperEnv(data)\n")
+		b.WriteString("\t\tif err != nil { return fmt.Errorf(\"expand env %s: %w\", f, err) }\n")
+		b.WriteString("\t\tif err := yaml.Unmarshal(data, cfg); err != nil { return fmt.Errorf(\"parse %s: %w\", f, err) }\n")
+		b.WriteString("\t}\n")
+		b.WriteString("\tl.shadow = cfg\n")
+		b.WriteString("\treturn nil\n")
+		b.WriteString("}\n\n")
+
+		b.WriteString("func (l *")
+		b.WriteString(prefix)
+		b.WriteString("Loader) Check() []string { return l.shadow.CheckStatic(l.cur.Load()) }\n\n")
+
+		b.WriteString("func (l *")
+		b.WriteString(prefix)
+		b.WriteString("Loader) Validate() []string { return l.shadow.Validate() }\n\n")
+
+		b.WriteString("func (l *")
+		b.WriteString(prefix)
+		b.WriteString("Loader) Swap() { l.cur.Store(l.shadow); l.shadow = nil }\n\n")
+
+		// typed accessor
+		b.WriteString("func ")
+		b.WriteString(prefix)
+		b.WriteString("Config() *gen.")
+		b.WriteString(configType)
+		b.WriteString(" {\n")
+		b.WriteString("\tif ")
+		b.WriteString(svcName)
+		b.WriteString(" == nil { return nil }\n")
+		b.WriteString("\treturn ")
+		b.WriteString(svcName)
+		b.WriteString(".cur.Load()\n")
+		b.WriteString("}\n")
+
+		path := filepath.Join(dir, svcName+".gen.go")
+		if err := os.WriteFile(path, []byte(b.String()), 0o644); err != nil {
+			fmt.Fprintf(os.Stderr, "write %s: %v\n", path, err)
+			os.Exit(1)
 		}
-		sort.Strings(sorted)
-		fmt.Fprintf(os.Stderr, "[%s] 静态: %s\n", md.Name(), strings.Join(sorted, ", "))
+		fmt.Println("generated", path)
+		count++
 	}
+	return count
 }
+
+// renderCommonLoader 为 CommonConfig 生成精简 Loader（不热更，不进 ConfigManager）
+func renderCommonLoader(msgs []msgInfo) bool {
+	for _, msg := range msgs {
+		if msg.Name != "CommonConfig" {
+			continue
+		}
+		dir := filepath.Join("conf", "schema", "gen", "loader")
+		var b strings.Builder
+		b.WriteString("// Code generated by gen_config. DO NOT EDIT.\n")
+		b.WriteString("package config\n\n")
+
+		b.WriteString("import (\n")
+		b.WriteString("\t\"fmt\"\n\n")
+		b.WriteString("\t\"project/conf/schema/gen\"\n")
+		b.WriteString("\tconfig \"project/internal/core/config\"\n")
+		b.WriteString("\t\"project/pkg/configgen\"\n")
+		b.WriteString(")\n\n")
+
+		// Loader struct — 不热更，普通指针
+		b.WriteString("type CommonLoader struct {\n")
+		b.WriteString("\tfiles []string\n")
+		b.WriteString("\tcur   *gen.CommonConfig\n")
+		b.WriteString("}\n\n")
+
+		b.WriteString("var common *CommonLoader\n\n")
+
+		// RegisterCommon 筛 common 文件 → 立即加载
+		b.WriteString("func RegisterCommon(allFiles []string) {\n")
+		b.WriteString("\tcommonFiles, _ := config.SplitFiles(allFiles)\n")
+		b.WriteString("\tl := &CommonLoader{files: commonFiles}\n")
+		b.WriteString("\tcommon = l\n")
+		b.WriteString("\tif err := l.Load(); err != nil { panic(fmt.Sprintf(\"common config load: %v\", err)) }\n")
+		b.WriteString("}\n\n")
+
+		// Load — yaml 直通 typed，零 map
+		b.WriteString("func (l *CommonLoader) Load() error {\n")
+		b.WriteString("\tcfg, err := configgen.LoadFiles[*gen.CommonConfig](l.files...)\n")
+		b.WriteString("\tif err != nil { return fmt.Errorf(\"common load: %w\", err) }\n")
+		b.WriteString("\tif errs := cfg.Validate(); len(errs) > 0 { return fmt.Errorf(\"common validate: %v\", errs) }\n")
+		b.WriteString("\tl.cur = cfg\n")
+		b.WriteString("\treturn nil\n")
+		b.WriteString("}\n\n")
+
+		// CommonConfig accessor
+		b.WriteString("func CommonConfig() *gen.CommonConfig {\n")
+		b.WriteString("\tif common == nil { return nil }\n")
+		b.WriteString("\treturn common.cur\n")
+		b.WriteString("}\n")
+
+		path := filepath.Join(dir, "common.gen.go")
+		if err := os.WriteFile(path, []byte(b.String()), 0o644); err != nil {
+			fmt.Fprintf(os.Stderr, "write %s: %v\n", path, err)
+			os.Exit(1)
+		}
+		fmt.Println("generated", path)
+		return true
+	}
+	return false
+}
+
+// svcNameFromProto 从 proto 文件名提取服务名（"gatesvr.proto" → "gatesvr"）
+func svcNameFromProto(fn string) string {
+	base := filepath.Base(fn)
+	return strings.TrimSuffix(base, ".proto")
+}
+
