@@ -17,11 +17,11 @@
 
 涉及：
 
-- `internal/core/ragent/client.go`
+- `internal/core/ragent/sdk/client.go`
 - `internal/server/lobby/module.go`
 - `internal/server/gate/module.go`
 - `internal/server/gate/ping_tong_test.go`
-- `internal/server/routeragent/rpc_wire.go`
+- `internal/core/ragent/wire/rpc_wire.go`
 
 ### 2. RPCWireHeaderLen
 
@@ -29,7 +29,7 @@
 
 涉及：
 
-- `internal/server/routeragent/rpc_wire.go`
+- `internal/core/ragent/wire/rpc_wire.go`
 
 ### 3. RouterAgent 队列状态日志降噪
 
@@ -39,7 +39,7 @@ metrics 保留不变；只是避免空闲/压测窗口里周期性刷日志造�
 
 涉及：
 
-- `internal/server/routeragent/module.go`
+- `internal/core/ragent/agent/runtime.go`
 
 ## 已回滚试验
 

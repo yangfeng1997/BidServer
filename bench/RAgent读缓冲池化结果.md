@@ -11,7 +11,7 @@
 
 ### 1. ragent client 读帧缓冲池化
 
-`internal/core/ragent/client.go` 中的 `readFrame` 从每帧 `make([]byte, length)` 改成从 `sync.Pool` 获取缓冲区，并返回 `Frame + buffer`。
+`internal/core/ragent/sdk/client.go` 中的 `readFrame` 从每帧 `make([]byte, length)` 改成从 `sync.Pool` 获取缓冲区，并返回 `Frame + buffer`。
 
 释放点按帧生命周期区分：
 

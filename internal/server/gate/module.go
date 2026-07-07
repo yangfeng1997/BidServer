@@ -18,8 +18,6 @@ import (
 	"project/internal/core/session"
 	"project/protocol/common"
 	genrpc "project/protocol/gen"
-	genremote "project/protocol/gen/remote"
-	remotepb "project/protocol/remote"
 )
 
 const moduleName = "gate"
@@ -61,7 +59,6 @@ func (m *Module) Init() error {
 
 	m.sessions = session.NewSessionManager()
 	m.remoteDispatcher = corerpc.NewDispatcher()
-	genremote.RegisterGateRemote(m.remoteDispatcher, m)
 	m.dispatcher = dispatcher.NewGateDispatcher(uint32(common.ServerType_ST_GATESVR), m.sessions)
 	m.dispatcher.Use(dispatcher.RecoverMiddleware())
 	m.dispatcher.Use(dispatcher.AuthMiddleware(genrpc.AuthWhitelist))
@@ -72,7 +69,6 @@ func (m *Module) Init() error {
 	m.client = sdk.NewClient(m.App().NodeIDUint32(), cfg.RouteragentSockPath, poster, m.handleRagentFrame)
 	m.rpcCore = corerpc.New(m.client, corerpc.WithPoster(poster))
 	m.client.SetCore(m.rpcCore)
-	genrpc.Init(m.rpcCore)
 	corerpc.Init(m.rpcCore)
 	m.dispatcher.SetForward(m.forwardToBackend)
 	m.dispatcher.SetHandshakeHandler(m.handleHandshake)
@@ -240,37 +236,3 @@ func (m *Module) handleRemote(frame ragentwire.Frame) {
 	}
 }
 
-func (m *Module) SendToClient(_ corerpc.Ctx, ntf *remotepb.RPC_SendToClient_Ntf) {
-	if ntf == nil || ntf.GetCmdId() == 0 {
-		return
-	}
-	var sess *session.Session
-	if ntf.GetUid() != 0 {
-		sess = m.sessions.GetByUID(ntf.GetUid())
-	}
-	if sess == nil && ntf.GetSessionId() != "" {
-		sess = m.sessions.GetByConnID(ntf.GetSessionId())
-	}
-	if sess == nil || sess.Conn == nil {
-		return
-	}
-	pkt, err := codec.EncodeDataMessagePacket(codec.Message{Type: codec.MessageNotify, CmdID: ntf.GetCmdId(), Body: ntf.GetPayload()})
-	if err != nil {
-		return
-	}
-	conn.SendOwned(sess.Conn, pkt)
-}
-
-func (m *Module) BindSession(_ corerpc.Ctx, ntf *remotepb.RPC_BindSession_Ntf) {
-	if ntf == nil || ntf.GetSessionId() == "" {
-		return
-	}
-	m.sessions.BindSession(ntf.GetSessionId(), ntf.GetUid(), ntf.GetBoundNodes())
-}
-
-func (m *Module) SetBound(_ corerpc.Ctx, ntf *remotepb.RPC_SetBound_Ntf) {
-	if ntf == nil || ntf.GetUid() == 0 || ntf.GetServerType() == 0 || ntf.GetNodeId() == 0 {
-		return
-	}
-	m.sessions.SetBound(ntf.GetUid(), ntf.GetServerType(), ntf.GetNodeId())
-}

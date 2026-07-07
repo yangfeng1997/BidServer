@@ -12,7 +12,7 @@
 
 - 网关服务实现。
 - 这里负责加载网关和公共配置、初始化 logger group、装配 BaseBuilder。
-- `module.go` 负责客户端 TCP / WebSocket 接入、Session 管理、客户端上行转发到 RouterAgent，以及通过生成的 `gen/remote` route 注册适配器处理 GateRemote 下行接口。
+- `module.go` 负责客户端 TCP / WebSocket 接入、Session 管理、客户端上行 ping/pong 转发到 RouterAgent。
 - `ragent_client.go` 负责连接本机 RouterAgent UDS，并实现 `internal/core/rpc.Transport`。
 
 ## 主要文件
@@ -26,7 +26,7 @@
 ## 快速读法
 
 - 先看 `builder.go` 理解配置加载和 builder 组装。
-- 查 gate 运行链路看 `module.go`：acceptor、dispatcher、Session、GateRemote 都在这里装配。
+- 查 gate 运行链路看 `module.go`：acceptor、dispatcher、Session 和 RouterAgent 转发都在这里装配。
 - 查 gate 与 RouterAgent 的 UDS/RPC 帧适配看 `ragent_client.go`。
 - 再看 `config.go` 理解配置 entry 与 ReloadConfig。
 - 再看 `options.go` 理解启动参数。

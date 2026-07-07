@@ -15,9 +15,9 @@
 
 已应用到：
 
-- `internal/server/routeragent/uds_conn.go`
-- `internal/server/routeragent/peer_conn.go`
-- `internal/core/ragent/client.go`
+- `internal/core/ragent/agent/uds_conn.go`
+- `internal/core/ragent/agent/peer_conn.go`
+- `internal/core/ragent/sdk/client.go`
 
 ### 2. ragent 读帧减少一次整帧拷贝
 

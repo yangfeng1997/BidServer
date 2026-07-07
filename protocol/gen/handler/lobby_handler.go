@@ -10,46 +10,24 @@ import (
 )
 
 const (
-	RouteLobbyHandlerClaimReward = "LobbyHandler/ClaimReward"
-	RouteLobbyHandlerSyncPos     = "LobbyHandler/SyncPos"
-	RouteLobbyHandlerPing        = "LobbyHandler/Ping"
+	RouteLobbyHandlerPing = "LobbyHandler/Ping"
 )
 
 type LobbyHandler interface {
-	ClaimReward(ctx corerpc.Ctx, req *handler.CS_ClaimReward_Req, reply corerpc.Reply[*handler.SC_ClaimReward_Rsp])
-	SyncPos(ctx corerpc.Ctx, ntf *handler.CS_SyncPos_Ntf)
-	Ping(ctx corerpc.Ctx, req *handler.CS_Ping_Req, reply corerpc.Reply[*handler.SC_Tong_Rsp])
+	Ping(ctx corerpc.Ctx, req *handler.CS_Ping_Req, reply corerpc.Reply[*handler.SC_Pong_Rsp])
 }
 
 func RegisterLobbyHandler(d *corerpc.Dispatcher, srv LobbyHandler) {
 	if d == nil || srv == nil {
 		return
 	}
-	// LobbyHandler/ClaimReward (Req/Rsp)
-	d.MustRegister(RouteLobbyHandlerClaimReward, corerpc.RecoverRoute(RouteLobbyHandlerClaimReward, func(ctx corerpc.Ctx, body []byte, reply func([]byte, error)) error {
-		var req handler.CS_ClaimReward_Req
-		if err := proto.Unmarshal(body, &req); err != nil {
-			return errcode.New(errcode.ERR_UNMARSHAL, err.Error())
-		}
-		srv.ClaimReward(ctx, &req, corerpc.ReplyProto[*handler.SC_ClaimReward_Rsp](reply))
-		return nil
-	}))
-	// LobbyHandler/SyncPos (Notify)
-	d.MustRegister(RouteLobbyHandlerSyncPos, corerpc.RecoverRoute(RouteLobbyHandlerSyncPos, func(ctx corerpc.Ctx, body []byte, reply func([]byte, error)) error {
-		var ntf handler.CS_SyncPos_Ntf
-		if err := proto.Unmarshal(body, &ntf); err != nil {
-			return errcode.New(errcode.ERR_UNMARSHAL, err.Error())
-		}
-		srv.SyncPos(ctx, &ntf)
-		return nil
-	}))
 	// LobbyHandler/Ping (Req/Rsp)
 	d.MustRegister(RouteLobbyHandlerPing, corerpc.RecoverRoute(RouteLobbyHandlerPing, func(ctx corerpc.Ctx, body []byte, reply func([]byte, error)) error {
 		var req handler.CS_Ping_Req
 		if err := proto.Unmarshal(body, &req); err != nil {
 			return errcode.New(errcode.ERR_UNMARSHAL, err.Error())
 		}
-		srv.Ping(ctx, &req, corerpc.ReplyProto[*handler.SC_Tong_Rsp](reply))
+		srv.Ping(ctx, &req, corerpc.ReplyProto[*handler.SC_Pong_Rsp](reply))
 		return nil
 	}))
 }

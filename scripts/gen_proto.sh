@@ -10,19 +10,13 @@ protoc --proto_path=. --proto_path=/usr/local/include \
     protocol/common/node.proto \
     protocol/common/options.proto \
     protocol/common/errcode.proto \
-    protocol/ra/ra.proto \
-    protocol/cs/lobby_cs.proto \
-    protocol/ss/lobby_ss.proto \
-    protocol/handler/lobby_handler.proto \
-    protocol/remote/lobby_remote.proto \
-    protocol/remote/gate_remote.proto
+    protocol/handler/lobby_handler.proto
 
 echo "=== 2. generating handler and remote stubs ==="
+rm -f protocol/gen/handler/*.go protocol/gen/remote/*.go protocol/gen/rpc.go
 protoc --proto_path=. --proto_path=/usr/local/include \
     --svcstub_out=protocol/gen --svcstub_opt=paths=source_relative \
-    protocol/handler/lobby_handler.proto \
-    protocol/remote/lobby_remote.proto \
-    protocol/remote/gate_remote.proto
+    protocol/handler/lobby_handler.proto
 
 echo "=== 3. generating route table ==="
 go run tools/gen_routes/main.go --proto protocol/handler --out protocol/gen/routes.go

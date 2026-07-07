@@ -30,7 +30,7 @@ import (
 
 const (
 	cmdPing = 2054
-	cmdTong = 2055
+	cmdPong = 2055
 )
 
 type config struct {
@@ -137,13 +137,13 @@ func runOnce(cfg config) {
 	defer client.close()
 
 	fmt.Printf("handshake ok addr=%s\n", cfg.addr)
-	expected := expectedTong(cfg.text)
+	expected := expectedPong(cfg.text)
 	rsp, latency, err := client.ping(uint16(cfg.seq), cfg.text, expected, cfg.timeout)
 	if err != nil {
 		fatalf("ping: %v", err)
 	}
 	fmt.Printf("ping sent seq=%d cmd=%d text=%q\n", cfg.seq, cmdPing, cfg.text)
-	fmt.Printf("tong recv seq=%d cmd=%d text=%q latency=%s\n", cfg.seq, cmdTong, rsp.GetText(), latency)
+	fmt.Printf("pong recv seq=%d cmd=%d text=%q latency=%s\n", cfg.seq, cmdPong, rsp.GetText(), latency)
 }
 
 func runBench(cfg config) {
@@ -191,7 +191,7 @@ func runBenchClient(cfg config, clientID int, result *benchResult) {
 	for i := 0; i < cfg.requests; i++ {
 		seq := uint16((i % 0xffff) + 1)
 		text := benchText(cfg.text, clientID, i, seq)
-		expected := expectedTong(text)
+		expected := expectedPong(text)
 		result.sent.Add(1)
 		_, latency, err := client.ping(seq, text, expected, cfg.timeout)
 		if err != nil {
@@ -263,7 +263,7 @@ func newClient(addr string, timeout time.Duration) (*client, error) {
 
 func (c *client) close() { _ = c.conn.Close() }
 
-func (c *client) ping(seq uint16, text string, expected string, timeout time.Duration) (*handlerpb.SC_Tong_Rsp, time.Duration, error) {
+func (c *client) ping(seq uint16, text string, expected string, timeout time.Duration) (*handlerpb.SC_Pong_Rsp, time.Duration, error) {
 	reqBody, err := proto.Marshal(&handlerpb.CS_Ping_Req{Text: text})
 	if err != nil {
 		return nil, 0, check(failureMarshal, "marshal ping: %w", err)
@@ -278,7 +278,7 @@ func (c *client) ping(seq uint16, text string, expected string, timeout time.Dur
 	}
 	pkt, err := c.readPacket(timeout)
 	if err != nil {
-		return nil, 0, check(failureRead, "read tong packet: %w", err)
+		return nil, 0, check(failureRead, "read pong packet: %w", err)
 	}
 	latency := time.Since(start)
 	if pkt.Type != codec.PacketData {
@@ -286,7 +286,7 @@ func (c *client) ping(seq uint16, text string, expected string, timeout time.Dur
 	}
 	msg, err := codec.DecodeMessage(pkt.Body)
 	if err != nil {
-		return nil, latency, check(failureMessageDecode, "decode tong message: %w", err)
+		return nil, latency, check(failureMessageDecode, "decode pong message: %w", err)
 	}
 	if msg.Type != codec.MessageResponse {
 		return nil, latency, check(failureMessageType, "unexpected message type=%d", msg.Type)
@@ -294,18 +294,18 @@ func (c *client) ping(seq uint16, text string, expected string, timeout time.Dur
 	if msg.SeqID != seq {
 		return nil, latency, check(failureSeqMismatch, "unexpected seq=%d want=%d", msg.SeqID, seq)
 	}
-	if msg.CmdID != cmdTong {
-		return nil, latency, check(failureCmdMismatch, "unexpected cmd=%d want=%d", msg.CmdID, cmdTong)
+	if msg.CmdID != cmdPong {
+		return nil, latency, check(failureCmdMismatch, "unexpected cmd=%d want=%d", msg.CmdID, cmdPong)
 	}
 	if msg.ErrCode != 0 {
-		return nil, latency, check(failureErrCode, "tong error code=%s", msg.ErrCode.String())
+		return nil, latency, check(failureErrCode, "pong error code=%s", msg.ErrCode.String())
 	}
-	var rsp handlerpb.SC_Tong_Rsp
+	var rsp handlerpb.SC_Pong_Rsp
 	if err := proto.Unmarshal(msg.Body, &rsp); err != nil {
-		return nil, latency, check(failurePayloadDecode, "unmarshal tong: %w", err)
+		return nil, latency, check(failurePayloadDecode, "unmarshal pong: %w", err)
 	}
 	if rsp.GetText() != expected {
-		return nil, latency, check(failurePayloadMismatch, "unexpected tong text=%q want=%q", rsp.GetText(), expected)
+		return nil, latency, check(failurePayloadMismatch, "unexpected pong text=%q want=%q", rsp.GetText(), expected)
 	}
 	return &rsp, latency, nil
 }
@@ -349,11 +349,11 @@ func benchText(base string, clientID, requestID int, seq uint16) string {
 	return fmt.Sprintf("%s-client-%d-req-%d-seq-%d", base, clientID, requestID+1, seq)
 }
 
-func expectedTong(text string) string {
+func expectedPong(text string) string {
 	if text == "" {
-		return "tong"
+		return "pong"
 	}
-	return "tong:" + text
+	return "pong:" + text
 }
 
 func check(kind failureKind, format string, args ...any) error {

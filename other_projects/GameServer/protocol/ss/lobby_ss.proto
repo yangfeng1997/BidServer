@@ -1,7 +1,0 @@
-syntax = "proto3";
-
-package protocol.ss;
-
-option go_package = "project/protocol/ss;ss";
-
-message RPC_Example_Req {}

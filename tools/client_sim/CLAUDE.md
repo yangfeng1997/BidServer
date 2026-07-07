@@ -18,7 +18,7 @@
 
 ## 快速读法
 
-- `main.go` 默认执行 handshake，然后发送 `CS_Ping_Req`，等待 `SC_Tong_Rsp`。
+- `main.go` 默认执行 handshake，然后发送 `CS_Ping_Req`，等待 `SC_Pong_Rsp`。
 - 默认 TCP 地址为 `127.0.0.1:7001`，可用 `--addr` 覆盖。
 
 ## 工作规则

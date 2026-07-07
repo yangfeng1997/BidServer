@@ -10,7 +10,7 @@
 ## 目录定位
 
 - 后端服务之间的 RPC remote 定义。
-- 当前仅保留已有服务相关协议：gate、lobby。
+- 当前主链路不保留 backend remote service，本目录暂不包含业务 proto。
 
 ## 主要文件
 
@@ -21,3 +21,4 @@
 
 - 修改 remote 后要重新生成 `protocol/gen/remote/` 和 `protocol/gen/rpc.go`。
 - 没有对应服务实现的 remote 协议不要引入当前主链路。
+- 空 remote proto 不会生成 `protocol/gen/remote/*.go`，`protocol/gen/rpc.go` 只保留编排 helper。

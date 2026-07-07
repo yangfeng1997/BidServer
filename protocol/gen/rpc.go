@@ -8,21 +8,12 @@ import (
 
 	errcode "project/internal/core/errcode"
 	corerpc "project/internal/core/rpc"
-	remote "project/protocol/remote"
 )
 
 const (
 	serverTypeGate        = 1
 	serverTypeLobby       = 2
 	serverTypeRouterAgent = 6
-)
-
-const (
-	RouteGateRemoteSendToClient      = "GateRemote/SendToClient"
-	RouteGateRemoteBindSession       = "GateRemote/BindSession"
-	RouteGateRemoteSetBound          = "GateRemote/SetBound"
-	RouteLobbyRemoteLogin            = "LobbyRemote/Login"
-	RouteLobbyRemotePlayerDisconnect = "LobbyRemote/PlayerDisconnect"
 )
 
 type Stub struct {
@@ -98,49 +89,7 @@ func (s *Stub) typedSend(ctx corerpc.Ctx, route string, ntf proto.Message) {
 	s.core.Send(s.target, route, body, ctx)
 }
 
-type GateStub struct{ *Stub }
-
-func (s *GateStub) SendToClient(ctx corerpc.Ctx, ntf *remote.RPC_SendToClient_Ntf) {
-	s.typedSend(ctx, RouteGateRemoteSendToClient, ntf)
-}
-
-func (s *GateStub) BindSession(ctx corerpc.Ctx, ntf *remote.RPC_BindSession_Ntf) {
-	s.typedSend(ctx, RouteGateRemoteBindSession, ntf)
-}
-
-func (s *GateStub) SetBound(ctx corerpc.Ctx, ntf *remote.RPC_SetBound_Ntf) {
-	s.typedSend(ctx, RouteGateRemoteSetBound, ntf)
-}
-
-type LobbyStub struct{ *Stub }
-
-func (s *LobbyStub) Login(ctx corerpc.Ctx, req *remote.RPC_Login_Req, cb func(*remote.RPC_Login_Rsp, error)) {
-	s.typedCall(ctx, RouteLobbyRemoteLogin, req, func(body []byte, err error) {
-		if err != nil {
-			cb(nil, err)
-			return
-		}
-		var rsp remote.RPC_Login_Rsp
-		if uerr := proto.Unmarshal(body, &rsp); uerr != nil {
-			cb(nil, uerr)
-			return
-		}
-		cb(&rsp, nil)
-	})
-}
-
-func (s *LobbyStub) PlayerDisconnect(ctx corerpc.Ctx, ntf *remote.RPC_PlayerDisconnect_Ntf) {
-	s.typedSend(ctx, RouteLobbyRemotePlayerDisconnect, ntf)
-}
-
-var (
-	Gate  = &GateStub{Stub: NewStub(nil, serverTypeGate)}
-	Lobby = &LobbyStub{Stub: NewStub(nil, serverTypeLobby)}
-)
-
 func Init(core *corerpc.Core) {
-	Gate.Stub.core = core
-	Lobby.Stub.core = core
 }
 
 type Next = corerpc.Next

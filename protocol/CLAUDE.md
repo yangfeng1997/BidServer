@@ -9,7 +9,8 @@
 ## 目录定位
 
 - 协议 proto 源文件与生成代码。
-- `common/` 放协议注解、错误码和节点类型；`cs/` 放客户端协议；`handler/` 放前端 handler 服务；`remote/` 放后端 RPC remote 服务；`ra/` 放 routeragent 协议；`gen/` 放生成的路由、handler、remote 和 RPC stub。
+- `common/` 放协议注解、错误码和节点类型；`handler/` 放前端 handler 服务；`remote/` 放后端 RPC remote 服务；`gen/` 放生成的路由、handler、remote 和 RPC stub。
+- 当前主链路只保留 `LobbyHandler/Ping` -> `SC_Pong_Rsp`。`cs/`、`ss/`、`ra/`、`remote/` 暂无业务 proto，仅保留目录索引作为扩展入口。
 
 ## 子目录
 
@@ -25,7 +26,7 @@
 
 - 查协议扩展选项先看 `common/options.proto`。
 - 查客户端入口命令先看 `handler/`、`gen/routes.go` 和 `gen/handler/`。
-- 查后端 RPC 先看 `remote/`、`gen/remote/` 和 `gen/rpc.go`。
+- 查后端 RPC 先看 `remote/`、`gen/remote/` 和 `gen/rpc.go`；当前没有 backend remote service。
 - 查 RouterAgent route 自动分发先看 `internal/core/rpc.Dispatcher` 与 `gen/handler/`、`gen/remote/` 的 Register 函数。
 - 查生成链路先看 `tools/gen_routes/` 与 `tools/protoc-gen-svcstub/`。
 

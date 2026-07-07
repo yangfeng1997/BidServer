@@ -92,11 +92,9 @@ func run(p *protogen.Plugin) error {
 			}
 		}
 	}
-	if len(backendSpecs) > 0 {
-		sort.Slice(backendSpecs, func(i, j int) bool { return backendSpecs[i].Name < backendSpecs[j].Name })
-		if err := writeRPCFile(p, backendSpecs); err != nil {
-			return err
-		}
+	sort.Slice(backendSpecs, func(i, j int) bool { return backendSpecs[i].Name < backendSpecs[j].Name })
+	if err := writeRPCFile(p, backendSpecs); err != nil {
+		return err
 	}
 	return nil
 }
@@ -362,14 +360,16 @@ func writeRPCFile(p *protogen.Plugin, specs []serviceSpec) error {
 	g.P("\tserverTypeRouterAgent = 6")
 	g.P(")")
 	g.P("")
-	g.P("const (")
-	for _, spec := range specs {
-		for _, m := range spec.Methods {
-			g.P("\t", routeConstName(spec.Name, m.Name), " = \"", spec.Name, "/", m.Name, "\"")
+	if hasBackendMethods(specs) {
+		g.P("const (")
+		for _, spec := range specs {
+			for _, m := range spec.Methods {
+				g.P("\t", routeConstName(spec.Name, m.Name), " = \"", spec.Name, "/", m.Name, "\"")
+			}
 		}
+		g.P(")")
+		g.P("")
 	}
-	g.P(")")
-	g.P("")
 	g.P("type Stub struct {")
 	g.P("\tcore   *corerpc.Core")
 	g.P("\ttarget corerpc.Target")
@@ -475,12 +475,14 @@ func writeRPCFile(p *protogen.Plugin, specs []serviceSpec) error {
 			g.P("")
 		}
 	}
-	g.P("var (")
-	for _, spec := range specs {
-		g.P("\t", spec.BaseName, " = &", spec.BaseName, "Stub{Stub: NewStub(nil, ", spec.ServerTypeConst, ")}")
+	if len(specs) > 0 {
+		g.P("var (")
+		for _, spec := range specs {
+			g.P("\t", spec.BaseName, " = &", spec.BaseName, "Stub{Stub: NewStub(nil, ", spec.ServerTypeConst, ")}")
+		}
+		g.P(")")
+		g.P("")
 	}
-	g.P(")")
-	g.P("")
 	g.P("func Init(core *corerpc.Core) {")
 	for _, spec := range specs {
 		g.P("\t", spec.BaseName, ".Stub.core = core")
@@ -509,6 +511,15 @@ func writeRPCFile(p *protogen.Plugin, specs []serviceSpec) error {
 	g.P("")
 	g.P("func Seq(ctx corerpc.Ctx) *Sequence { return corerpc.Seq(ctx) }")
 	return nil
+}
+
+func hasBackendMethods(specs []serviceSpec) bool {
+	for _, spec := range specs {
+		if len(spec.Methods) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func typeImports(spec serviceSpec) map[string]bool {
