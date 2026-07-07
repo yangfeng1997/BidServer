@@ -1,6 +1,6 @@
 # RouterAgent 节点注册与服务发现
 
-本文档记录 BidServer 中 RouterAgent、业务节点与 etcd 服务发现之间的职责划分。本文以当前 sidecar 架构为基础：业务进程只连接本机 RouterAgent，跨机器通信由 RouterAgent 之间转发。
+本文档记录 GameServer 中 RouterAgent、业务节点与 etcd 服务发现之间的职责划分。本文以当前 sidecar 架构为基础：业务进程只连接本机 RouterAgent，跨机器通信由 RouterAgent 之间转发。
 
 ## 结论
 
@@ -332,11 +332,11 @@ BidKing2 的设计文档同样采用 sidecar 模型：
 - 预期由 RouterAgent 代业务节点注册到 etcd。
 - etcd 节点 value 中包含 `node_id/server_type/ra_addr/start_at`。
 
-BidKing2 当前源码中服务发现骨架存在，但代业务节点注册到 etcd 尚未完整接入 RouterAgent module。BidServer 应按上述设计补完整链路。
+BidKing2 当前源码中服务发现骨架存在，但代业务节点注册到 etcd 尚未完整接入 RouterAgent module。GameServer 应按上述设计补完整链路。
 
 ## 当前实现状态
 
-截至本文编写时，BidServer 已具备：
+截至本文编写时，GameServer 已具备：
 
 - `--nodeid world.serverType.index` 启动参数。
 - App 保存 NodeID 字符串，并可转换为 `uint32`。
